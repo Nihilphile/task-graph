@@ -1,0 +1,48 @@
+name: task-graph
+version: 0.1.0
+description: >-
+  Maintain a project task graph as Markdown files with YAML frontmatter, keep
+  full and partial dependencies acyclic and validated, and build a
+  self-contained read-only HTML viewer.
+entrypoint: SKILL.md
+runtime: node
+commands:
+  - name: task-graph
+    run: node dist/src/cli.js
+    description: >-
+      Task Graph CLI: bind task instructions, create dependency plans, inspect
+      available work, record claims, logs, reports and handoff snapshots, and
+      build an offline viewer. Run help for the registered commands.
+interface:
+  display_name: "任务图 Task Graph"
+  short_description: "维护任务 DAG、领取与状态，并生成离线 HTML 看板"
+  category: planning
+  brand_color: "#2F6FEB"
+  default_prompt: >-
+    使用 $task-graph 将已确认的 PRD 拆成独立任务文件，建立执行依赖，维护领取与状态，
+    校验 DAG 并生成离线 HTML 看板。
+triggers:
+  explicit:
+    - $task-graph
+  automatic:
+    - Decompose a confirmed PRD into tasks and dependencies
+    - Add, revise, replace, or reposition a task in the task DAG
+    - Link or unlink full and partial task dependencies
+    - Attach a child graph, set completion targets, or expose a completion point
+    - Claim, release, take over, reassign, or block a task
+    - Start, complete, cancel, or reopen a task
+    - Register a confirmed PRD source
+    - Validate the task graph or build the HTML viewer
+  excluded:
+    - Ordinary conversation that merely mentions wanting to do something
+    - Work that is not part of an explicitly requested task graph change
+permissions:
+  write:
+    - .task-graph/
+  network: github-opt-in
+capabilities:
+  starts_agents: false
+  detects_agent_failure: false
+  releases_stale_claims: false
+  retries_or_reschedules: false
+  edits_markdown_body: true

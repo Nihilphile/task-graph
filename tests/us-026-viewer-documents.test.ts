@@ -1,0 +1,95 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import path from 'node:path';
+import { initializeProject } from '../src/core/init.js';
+import { addTask } from '../src/core/taskops.js';
+import { addPlannedTasks } from '../src/core/planning.js';
+import { attachDocument, createHandoff } from '../src/core/documents.js';
+import { addWorkLog } from '../src/core/annotations.js';
+import { useTempWorkspace } from './helpers/temp.js';
+import { click, openViewer, taskNode, viewportScale } from './helpers/viewer-dom.js';
+
+test('selection expands only the selected card; dependency anchors follow its size and deselection restores geometry', async (t) => {
+  const w = useTempWorkspace(t, 'us-026-size');
+  initializeProject(w.root, { name: 'size', task: '前置任务' });
+  const task = addTask(w.root, { summary: 'Luna 独立实机验证沈藏锋 v4 拔刀的两个场景并检查原生证据和清理记录', dependsOnSpecs: ['T-0001'] });
+  const page = await openViewer(path.join(w.root, '.task-graph/generated/index.html'));
+  t.after(() => page.close());
+  const width = () => Number(taskNode(page, task.id).querySelector('.node-body')!.getAttribute('width'));
+  const originalWidth = width();
+  assert.ok(taskNode(page, task.id).querySelectorAll('.title tspan').length > 1);
+  const otherPosition = taskNode(page, 'T-0001').getAttribute('transform');
+  const edge = () => page.document.querySelector('path.edge-full')!.getAttribute('d');
+  const originalEdge = edge();
+  const scale = viewportScale(page);
+  click(page, taskNode(page, task.id));
+  assert.ok(width() > originalWidth);
+  assert.equal(viewportScale(page), scale);
+  assert.equal(taskNode(page, 'T-0001').getAttribute('transform'), otherPosition);
+  assert.notEqual(edge(), originalEdge);
+  click(page, taskNode(page, task.id));
+  assert.equal(width(), originalWidth);
+  assert.equal(edge(), originalEdge);
+  click(page, taskNode(page, task.id));
+  page.window.dispatchEvent(new page.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.equal(width(), originalWidth);
+  assert.deepEqual([...page.errors], []);
+});
+
+test('report, log and handoff labels open lists before documents; document clicks keep the task expanded', async (t) => {
+  const w = useTempWorkspace(t, 'us-026-docs');
+  initializeProject(w.root, { name: 'documents', task: '根任务' });
+  w.write('brief.md', '# 完整任务要求\n\n只有这一份要求。');
+  const task = addTask(w.root, { summary: '验证任务', content: 'brief.md' });
+  for (const n of [1, 2]) {
+    w.write(`report-${n}.md`, `# 场景 ${n} 报告\n\n报告正文 ${n}`);
+    attachDocument(w.root, { id: task.id, kind: 'report', path: `report-${n}.md`, title: `报告 ${n}` });
+    w.write(`log-${n}.md`, `# 工作记录 ${n}`);
+    attachDocument(w.root, { id: task.id, kind: 'log', path: `log-${n}.md` });
+  }
+  addWorkLog(w.root, { id: task.id, text: '总工作记录' });
+  createHandoff(w.root, { id: task.id, title: '交接给测试代理' });
+  const file = path.join(w.root, '.task-graph/generated/index.html');
+  const page = await openViewer(file);
+  t.after(() => page.close());
+  const tab = (key: string) => taskNode(page, task.id).querySelector(`[data-panel="${key}"]`)!;
+  const body = page.document.getElementById('details-body')!;
+  click(page, tab('reports'));
+  assert.equal(body.querySelectorAll('.document-item').length, 2);
+  assert.equal(body.querySelector('.document-content'), null);
+  click(page, body.querySelector('.document-item')!);
+  assert.match(body.querySelector('.document-content')!.textContent!, /报告正文/);
+  assert.equal(taskNode(page, task.id).getAttribute('data-expanded'), 'true');
+  const deepLink = page.window.location.hash;
+  assert.ok(deepLink.includes('document='));
+  click(page, body.querySelector('.back-to-list')!);
+  assert.equal(body.querySelectorAll('.document-item').length, 2);
+  click(page, tab('logs'));
+  assert.equal(body.querySelectorAll('.document-item').length, 3);
+  click(page, tab('handoffs'));
+  assert.equal(body.querySelectorAll('.document-item').length, 1);
+  click(page, body.querySelector('.document-item')!);
+  assert.match(body.querySelector('.document-content')!.textContent!, /完整任务要求/);
+  click(page, tab('content'));
+  assert.match(body.querySelector('.document-content')!.textContent!, /只有这一份要求/);
+  const restored = await openViewer(file, { hash: deepLink });
+  t.after(() => restored.close());
+  assert.match(restored.document.querySelector('.document-content')!.textContent!, /报告正文/);
+  assert.deepEqual([...page.errors, ...restored.errors], []);
+});
+
+test('double click enters a child graph while document labels stay in the parent graph', async (t) => {
+  const w = useTempWorkspace(t, 'us-026-drilldown');
+  initializeProject(w.root, { name: 'nested', task: '根任务' });
+  addPlannedTasks(w.root, [{ summary: '子任务', parentTask: 'T-0001' }]);
+  const page = await openViewer(path.join(w.root, '.task-graph/generated/index.html'));
+  t.after(() => page.close());
+  click(page, taskNode(page, 'T-0001').querySelector('[data-panel="content"]')!);
+  assert.ok(page.window.location.hash.includes('graph=G-001'));
+  taskNode(page, 'T-0001').dispatchEvent(new page.window.MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+  assert.equal(page.window.location.hash, '#graph=G-002');
+  assert.ok(taskNode(page, 'T-0002'));
+  click(page, page.document.querySelector('#breadcrumbs button')!);
+  assert.equal(page.window.location.hash, '#graph=G-001');
+  assert.deepEqual([...page.errors], []);
+});

@@ -1,0 +1,10 @@
+dist/
+node_modules/
+*.tsbuildinfo
+.task-graph/generated/
+npm-debug.log*
+.playwright-cli/
+output/
+.env
+.env.*
+!.env.example
