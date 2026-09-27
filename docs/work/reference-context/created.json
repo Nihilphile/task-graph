@@ -1,0 +1,52 @@
+{
+  "ok": true,
+  "tasks": [
+    {
+      "id": "T-0001",
+      "graph": "G-001",
+      "summary": "绑定参考文件与附件摘要",
+      "content": "docs/work/reference-context/attachments.md",
+      "file": ".task-graph/tasks/T-0001.md",
+      "readiness": "ready",
+      "blockedBy": []
+    },
+    {
+      "id": "T-0002",
+      "graph": "G-001",
+      "summary": "接手默认返回要求与依赖参考",
+      "content": "docs/work/reference-context/takeover.md",
+      "file": ".task-graph/tasks/T-0002.md",
+      "readiness": "blocked",
+      "blockedBy": [
+        {
+          "kind": "task",
+          "task": "T-0001"
+        }
+      ]
+    },
+    {
+      "id": "T-0003",
+      "graph": "G-001",
+      "summary": "文档与完整接手流程验收",
+      "content": "docs/work/reference-context/acceptance.md",
+      "file": ".task-graph/tasks/T-0003.md",
+      "readiness": "blocked",
+      "blockedBy": [
+        {
+          "kind": "task",
+          "task": "T-0001"
+        },
+        {
+          "kind": "task",
+          "task": "T-0002"
+        }
+      ]
+    }
+  ],
+  "keys": {
+    "reference-context.attachments": "T-0001",
+    "reference-context.takeover": "T-0002",
+    "reference-context.acceptance": "T-0003"
+  },
+  "view": ".task-graph/generated/index.html"
+}

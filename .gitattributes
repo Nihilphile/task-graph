@@ -1,0 +1,2 @@
+# Content-addressed snapshots must retain exact bytes on every platform.
+.task-graph/snapshots/** -text

@@ -1,0 +1,48 @@
+{
+  "ok": true,
+  "task": {
+    "id": "T-0003",
+    "status": "in_progress",
+    "title": "文档与完整接手流程验收"
+  },
+  "context": {
+    "project_root": "D:\\文档\\ChatGPT\\画板\\task-graph",
+    "content": {
+      "path": "docs/work/reference-context/acceptance.md",
+      "read_path": "docs/work/reference-context/acceptance.md",
+      "title": "文档与完整接手流程验收",
+      "summary": "文档与完整接手流程验收",
+      "mode": "live"
+    },
+    "references": [
+      {
+        "path": "docs/work/reference-context/attachments-reference.md",
+        "read_path": "docs/work/reference-context/attachments-reference.md",
+        "title": "attachments-reference.md",
+        "summary": "附件模型、documentView 接口及参考标签的接入位置",
+        "mode": "live",
+        "source_task": "T-0001",
+        "scope": "dependency"
+      },
+      {
+        "path": "docs/work/reference-context/takeover-reference.md",
+        "read_path": "docs/work/reference-context/takeover-reference.md",
+        "title": "takeover-reference.md",
+        "summary": "taskContext 返回结构、依赖收集范围及 CLI/HTML 接入点",
+        "mode": "live",
+        "source_task": "T-0002",
+        "scope": "dependency"
+      }
+    ],
+    "handoffs": [
+      {
+        "path": ".task-graph/snapshots/e8a3ed9e98fc6fe2fad1e6b6121405e185bd8fae1683045ae3ad37c7c5d079b8.md",
+        "read_path": ".task-graph/snapshots/e8a3ed9e98fc6fe2fad1e6b6121405e185bd8fae1683045ae3ad37c7c5d079b8.md",
+        "title": "派工 · 2026-09-26T10:05:10+08:00",
+        "mode": "snapshot",
+        "sha256": "e8a3ed9e98fc6fe2fad1e6b6121405e185bd8fae1683045ae3ad37c7c5d079b8"
+      }
+    ],
+    "reports": []
+  }
+}

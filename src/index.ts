@@ -31,6 +31,7 @@ export * from './core/readiness.js';
 export * from './core/blockers.js';
 export * from './core/annotations.js';
 export * from './core/documents.js';
+export * from './core/task-context.js';
 export * from './core/planning.js';
 export * from './core/composites.js';
 export * from './core/sources.js';

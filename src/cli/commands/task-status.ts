@@ -9,6 +9,8 @@ import {
 } from '../../core/lifecycle.js';
 import type { TaskDocument } from '../../core/task.js';
 import { resolveCwd } from '../paths.js';
+import { taskContext, formatTaskContext } from '../../core/task-context.js';
+import { executionGuidance, formatExecutionGuidance } from '../execution-guidance.js';
 
 interface StatusCommandConfig {
   /** Command action word after `task`, e.g. `start`. */
@@ -31,6 +33,7 @@ const COMMANDS: readonly StatusCommandConfig[] = [
     details: [
       'Dependencies and manual blockers must be satisfied; a handoff snapshot is saved at start.',
       'Pass --role and --session-id to claim and start in one transaction.',
+      'Returns the task-take skill path: read context, log readiness, then work without a second approval.',
       'A done task only moves back with --reopen, so finishing is never undone by accident.',
       'A cancelled task is terminal and cannot be started.',
     ],
@@ -94,6 +97,7 @@ function statusCommand(config: StatusCommandConfig): CommandSpec {
       }
       if (config.action !== 'start' && (args.has('role') || args.has('session-id'))) throw usageError('--role and --session-id are supported by task start.');
       if (config.action !== 'complete' && (args.has('report') || args.has('log'))) throw usageError('--report and --log are supported by task complete.');
+      const guidance = config.action === 'start' || config.action === 'reopen' ? executionGuidance() : undefined;
       const task = config.run(root, {
         id,
         reason: args.opt('reason'),
@@ -105,17 +109,20 @@ function statusCommand(config: StatusCommandConfig): CommandSpec {
         reports: args.all('report'),
         log: args.opt('log'),
       });
+      const context = config.action === 'start' || config.action === 'reopen' ? taskContext(root, task) : undefined;
 
       if (args.flag('json')) {
         ctx.io.out(
           JSON.stringify(
-            { ok: true, task: { id: task.id, status: task.status, title: task.title } },
+            { ok: true, task: { id: task.id, status: task.status, title: task.title }, ...(context ? { context, guidance } : {}) },
             null,
             2,
           ),
         );
       } else if (!args.flag('quiet')) {
         ctx.io.out(`${config.verb} ${task.id} (${task.status}): ${task.title}`);
+        if (context) ctx.io.out(formatTaskContext(context));
+        if (guidance) ctx.io.out(formatExecutionGuidance(guidance));
       }
       return EXIT_OK;
     },

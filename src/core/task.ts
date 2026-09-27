@@ -64,7 +64,10 @@ export interface TaskSubgraph {
 export interface TaskOutput {
   readonly path: string;
   readonly note?: string;
-  readonly kind?: 'report' | 'log' | 'handoff';
+  readonly kind?: 'report' | 'log' | 'handoff' | 'reference';
+  readonly summary?: string;
+  readonly audience?: 'agent' | 'user';
+  readonly handoffFormat?: 'indexed-v1';
   readonly title?: string;
   readonly addedAt?: string;
   readonly actor?: string;
@@ -311,13 +314,15 @@ function readOutputs(value: unknown, source: string): TaskOutput[] {
       const note = readOptionalString(entry['note'], source, `outputs[${index}].note`);
       const result: Record<string, string> = { path: outputPath };
       if (note !== undefined) result['note'] = note;
-      for (const [disk, field] of [['kind', 'kind'], ['title', 'title'], ['added_at', 'addedAt'], ['actor', 'actor'], ['snapshot', 'snapshot'], ['sha256', 'sha256']] as const) {
+      for (const [disk, field] of [['kind', 'kind'], ['title', 'title'], ['summary', 'summary'], ['audience', 'audience'], ['handoffFormat', 'handoffFormat'], ['added_at', 'addedAt'], ['actor', 'actor'], ['snapshot', 'snapshot'], ['sha256', 'sha256']] as const) {
         const text = readOptionalString(entry[disk], source, `outputs[${index}].${disk}`);
         if (text !== undefined) result[field] = text;
       }
-      if (result['kind'] !== undefined && !['report', 'log', 'handoff'].includes(result['kind'])) {
+      if (result['kind'] !== undefined && !['report', 'log', 'handoff', 'reference'].includes(result['kind'])) {
         throw new TaskGraphError('E_TASK_FORMAT', `${source}: unsupported output kind "${result['kind']}"`);
       }
+      if (result['audience'] !== undefined && !['agent', 'user'].includes(result['audience'])) throw new TaskGraphError('E_TASK_FORMAT', `${source}: unsupported output audience`);
+      if (result['handoffFormat'] !== undefined && result['handoffFormat'] !== 'indexed-v1') throw new TaskGraphError('E_TASK_FORMAT', `${source}: unsupported handoff format`);
       return result as unknown as TaskOutput;
     }
     throw new TaskGraphError(

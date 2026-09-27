@@ -1,0 +1,16 @@
+{
+  "tasks": [
+    {
+      "key": "csv-export.base",
+      "summary": "导出列表为 CSV",
+      "content": "doc/tasks/csv-export/base.md",
+      "depends_on": []
+    },
+    {
+      "key": "csv-export.filtered",
+      "summary": "按当前筛选条件导出",
+      "content": "doc/tasks/csv-export/filtered.md",
+      "depends_on": ["@csv-export.base"]
+    }
+  ]
+}

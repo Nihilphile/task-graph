@@ -33,7 +33,7 @@ test('content is a single external source; summary, free-form Markdown and depen
   assert.ok(!task.body.includes('## 完成条件'));
   assert.match(taskDocuments(w.root, task).content.body!, /原生证据/);
   w.write('说明/验证.md', '# 修订要求\n\n新增第二场景。');
-  assert.match(handoffText(w.root, task), /新增第二场景/);
+  assert.match(handoffText(w.root, task, { expand: ['content'] }), /新增第二场景/);
   reviseTask(w.root, { id, summary: '验证两场景' });
   task = loadTaskRepository(w.root).taskById(id)!;
   assert.equal(task.summary, '验证两场景');
@@ -110,7 +110,8 @@ test('reports snapshot their bytes, logs remain live, and saved handoffs preserv
   assert.ok(docs.logs.some((log) => log.body!.includes('第二轮')));
   assert.ok(docs.logs.some((log) => log.body!.includes('主控记录')));
   assert.match(docs.handoffs[0]!.body!, /原任务要求/);
-  assert.match(docs.handoffs[0]!.body!, /原始报告/);
+  assert.ok(!docs.handoffs[0]!.body!.includes('原始报告'));
+  assert.ok(docs.handoffs[0]!.body!.includes(docs.reports[0]!.snapshot!));
 });
 
 test('start claims and snapshots atomically; complete attaches reports, logs and releases ownership', async (t) => {

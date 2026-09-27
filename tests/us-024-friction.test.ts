@@ -14,17 +14,16 @@ test('work log and structured outputs are visible through task show and the gene
   const added = run('task', 'output', 'add', 'T-0001', '--path', 'docs/api.md', '--note', '接口契约');
   assert.equal(added.code, 0, added.stderr);
 
-  const shown = run('task', 'show', 'T-0001', '--json');
+  const shown = run('task', 'show', 'T-0001', '--expand', 'log', '--json');
   assert.equal(shown.code, 0, shown.stderr);
   const task = JSON.parse(shown.stdout).task as {
-    body: string;
+    documents: { logs: { body: string }[] };
     outputs: { path: string; note?: string }[];
-    history: { event: string; note?: string }[];
   };
-  assert.match(task.body, /## 工作记录\s+完成接口契约核对/);
-  assert.ok(!task.body.includes('只进历史'));
+  assert.match(task.documents.logs[0]!.body, /完成接口契约核对/);
+  assert.ok(!task.documents.logs[0]!.body.includes('只进历史'));
   assert.deepEqual(task.outputs, [{ path: 'docs/api.md', note: '接口契约' }]);
-  assert.ok(task.history.some((entry) => entry.event === 'output_added'));
+  assert.ok(workspace.read('.task-graph/tasks/T-0001.md').includes('output_added'));
   assert.ok(workspace.read('.task-graph/generated/index.html').includes('完成接口契约核对'));
 
   const removed = run('task', 'output', 'remove', 'T-0001', '--path', 'docs/api.md');

@@ -156,6 +156,7 @@ parent_task 优先决定子任务归属，计划顶层 graph 不把它移回入�
 | 报告 report | 可多份；每次附加保存文件快照 | 标签先开列表，再选报告 |
 | 工作记录 log | 一个默认日志，可另附多个当前文件 | 标签先开列表，再选日志 |
 | 交接 handoff | 可多份；保存生成或附加时的快照 | 标签先开列表，再选交接 |
+| 参考 reference | 默认 live，可用 --snapshot 冻结文件 | 标签按本任务/依赖分组列出地址与摘要，再打开文档 |
 | 普通产物 output | 路径记录，可在文件创建前登记 | 产物分类查看 |
 
 示例假设 T-0012 已存在，下面三个独立文件已写好：
@@ -173,7 +174,7 @@ CLI task handoff attach T-0012 --path doc/handoff/reviewer.md --title "补充交
 ### 预览交接、保存交接、开始执行
 
 - `task show T-0012 --handoff --json`：只读预览，用于查看或派工，不增加交接条目。
-- `task handoff create T-0012 --title "交给复核代理"`：汇总当前完整要求、前置产物和进展，保存为新交接条目，不改变任务状态。
+- `task handoff create T-0012 --title "交给复核代理"`：冻结当前要求正文与附件索引，不复制前置报告、日志或历史全文；保存为新交接条目，不改变任务状态。
 - `task handoff attach`：保存你自己写的交接文件。
 - `task start`：开始任务时自动保存一次交接快照；通常无需紧接着手动 create。
 
@@ -184,6 +185,83 @@ CLI task handoff attach T-0012 --path doc/handoff/reviewer.md --title "补充交
 入口图使用 `graph add --gh` 或 `graph publish` 开启 GitHub 后，正常任务命令也会自动发布 issue 与评论。首次配置、远程待同步的判断及文件上传边界见 [GitHub 同步参考](github-sync.md)；本节的离线文件版本规则继续适用。
 
 附件在任务的 outputs 数组中记录，kind 区分 report、log、handoff；CLI 自动管理快照路径和内容摘要。任务要求、日志读取当前文件，编辑后 build 刷新 HTML。报告和交接读取附加时的快照，原文件改动不会改变已有版本。
+
+kind 也支持 reference。四类 attach 命令都可传 `--summary "文件内容和用途"`；未传时字段省略，title 默认文件名。`task handoff create --summary ...` 为生成的交接登记摘要。正文中的关键章节、符号或阅读场景可直接写在 summary，不需要额外 locator/read_when 字段。
+
+### 接手文件清单与依赖参考
+
+`task start/reopen/show` 的成功响应提供顶层 guidance（skill、skill_path、message）。执行者读取 skill_path 指向的 task-take，按指南写接手记录后自主施工，并在完成前登记后继需要的参考。skill_path 是随 CLI 安装位置解析的绝对路径，与下面相对项目根目录的 context 文件地址不同；不持久化到任务或 handoff。主控已记录开始时，让执行者 show 后继续，避免重复 start。
+
+先写好接入说明，或定位到现有源代码文件，然后登记一次：
+
+```text
+CLI task reference attach T-0012 --path doc/references/report-store.md --summary "保存接口、错误语义与代码索引" --cwd "<项目根目录>" --json
+CLI task reference attach T-0012 --path src/reports/types.ts --title "报告类型" --summary "SavedReport 定义" --cwd "<项目根目录>" --json
+```
+
+示例文件须在真实项目中先存在。reference 默认 live，原文件改动后 build 刷新；需要冻结时加 `--snapshot`。已有同模式同版本登记不能重复附加；修改绑定元信息可先 output remove，再重新 attach，注意 remove 会移除同路径的所有附件版本。
+
+后继通过 `task show` 或成功的 `task start` 得到相同来源规则的顶层 context，无需再复制登记：
+
+```json
+{
+  "project_root": "/project",
+  "content": {
+    "path": "doc/tasks/integration.md",
+    "read_path": "doc/tasks/integration.md",
+    "title": "集成验证",
+    "summary": "集成验证",
+    "mode": "live"
+  },
+  "references": [
+    {
+      "source_task": "T-0012",
+      "scope": "dependency",
+      "path": "doc/references/report-store.md",
+      "read_path": "doc/references/report-store.md",
+      "title": "report-store.md",
+      "summary": "保存接口、错误语义与代码索引",
+      "mode": "live"
+    }
+  ],
+  "handoffs": [],
+  "reports": []
+}
+```
+
+两种 path 均相对 project_root。snapshot 条目的 read_path 指向实际快照，另有 sha256；文件不可读时返回 error。自身参考的 scope 为 self。上述 JSON 仅展示核心字段；当前 context 还有 logs、outputs、excluded，文件条目包含 kind、audience、size_bytes。所有清单均无正文；HTML 嵌入受支持文件的预览。
+
+reference、report 和普通产物的来源包括自身、直接完全依赖，以及部分依赖的父任务和 gate.requires 成员。日志、handoff 仅取自身。重叠 gate 按来源去重，相同文件由不同任务登记时保留不同来源。不沿祖先递归收集；外部正文链接也不递归展开。
+
+### 代理查询的清单、用途和正文展开
+
+普通 show 与 show --handoff 默认均为清单；--manifest 可明确锁定无正文模式。该版本有意改变旧行为：task.body、原始 history 和附件 body/html 不再默认返回。--handoff 返回 Markdown 索引，正文只在显式展开时加入。需要旧版正文的调用方应选择所需类别或路径，不再假设 show 会返回全部历史。
+
+查询中的 GitHub 状态来自最近保存的同步记录；清单查询不读取全部附件重新计算远程内容指纹。直接编辑文件后通过 build/github sync 刷新发布状态。
+
+```text
+CLI task show T-0012 --manifest --cwd "<项目根目录>" --json
+CLI task show T-0012 --handoff --expand content --expand report --preview --cwd "<项目根目录>" --json
+CLI task show T-0012 --handoff --expand-path doc/reports/implementation.md --cwd "<项目根目录>" --json
+CLI task show T-0012 --expand report --exclude-path doc/reports/tool-feedback.md --cwd "<项目根目录>" --json
+```
+
+--expand 可重复选择 content/report/log/reference/handoff/output；--expand-path 可重复选择原始路径或 read_path。--exclude-path 精确匹配项目相对原始路径或快照路径，支持正反斜杠，不支持 glob；排除优先。--manifest 与正文选择互斥。--preview 不读取附件正文，返回 selected_files、selected_bytes、estimated_chars_upper_bound、omitted_count 和 excluded。字符数按 UTF-8 文件字节数与格式开销估计 UTF-16 长度上界，非 token 数；文件变化或读取错误会影响实际结果。
+
+用途与类别独立：实现报告和工具反馈都可为 report，但后者可设 audience=user：
+
+```text
+CLI task report attach T-0012 --path doc/reports/tool-feedback.md --audience user --summary "供用户审阅的工具意见" --cwd "<项目根目录>" --json
+CLI task output set-audience T-0012 --path doc/reports/tool-feedback.md --audience user --cwd "<项目根目录>" --json
+```
+
+四类 attach 均支持 audience，未指定默认 agent；set-audience 更新该来源路径下所有类别/版本的绑定，保留文件和快照。user 附件仍在 HTML 展示，但代理 context、显式展开及新生成 handoff 都排除，仅在 excluded 中保留来源/路径/原因，不复制其摘要。用途不是访问控制或 GitHub 发布开关，已发布的评论不回撤；人工阅读使用 HTML。
+
+旧自动 handoff（kind=handoff、path=snapshot、无新格式标记）可能已复制被排除的内容，默认以 legacy_aggregate 排除。原快照不改写；审阅确认适合代理后可用 set-audience 标为 agent。新自动 handoff 有 indexed-v1 标记，只冻结本任务要求与过滤后的索引。任意报告、手写 handoff 或任务正文里已经复制的其他资料无法自动追溯用途，需人工整理或标记整个附件；工具也不会自动解析聊天中的路径排除规则。
+
+实时 CLI 清单给出当前 project_root；保存的 handoff 使用项目相对路径，不固化主控机器的绝对目录，便于换 checkout 后接手。
+
+源码引用在离线 HTML 以转义文本呈现，脚本不会执行。参考列表显示来源路径，固定版本同时列出快照读取地址。
 
 绑定文件须位于项目目录内。Markdown/text 正文内嵌在 HTML；PDF 等格式保留文件或快照链接，分享时需带上被链接文件并保持相对目录。
 

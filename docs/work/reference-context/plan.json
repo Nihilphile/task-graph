@@ -1,0 +1,26 @@
+{
+  "tasks": [
+    {
+      "key": "reference-context.attachments",
+      "summary": "绑定参考文件与附件摘要",
+      "content": "docs/work/reference-context/attachments.md"
+    },
+    {
+      "key": "reference-context.takeover",
+      "summary": "接手默认返回要求与依赖参考",
+      "content": "docs/work/reference-context/takeover.md",
+      "depends_on": [
+        "@reference-context.attachments"
+      ]
+    },
+    {
+      "key": "reference-context.acceptance",
+      "summary": "文档与完整接手流程验收",
+      "content": "docs/work/reference-context/acceptance.md",
+      "depends_on": [
+        "@reference-context.attachments",
+        "@reference-context.takeover"
+      ]
+    }
+  ]
+}

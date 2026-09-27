@@ -16,6 +16,14 @@ node dist/src/cli.js help
 
 `dist/` 为本地构建产物，不随源码提交。把本目录作为 Skill 安装时，先完成上述构建，Agent 入口是 [SKILL.md](SKILL.md)。
 
+本仓库同时维护三个配套入口：
+
+- [task-graph](SKILL.md)：CLI、任务图和 HTML。
+- [to-task](skills/to-task/SKILL.md)：供主控拆分和编写任务。
+- [task-take](skills/task-take/SKILL.md)：供执行者接手、记录上下文和交付。
+
+可将相应目录链接到本机技能目录。task-take 也会由 CLI 返回实际路径。验证主控到执行者的配套流程可运行 `npm run test:workflow`。
+
 ## 快速开始
 
 下面从工具目录执行；将 `/path/to/project` 替换为要管理的项目根目录。
@@ -34,6 +42,10 @@ node dist/src/cli.js task show T-0001 --handoff --cwd /path/to/project --json
 ```
 
 任务 ID 使用实际返回值。多项依赖可重复传 `--depends-on`；批量计划使用 `task add --from <plan.json绝对路径>`。
+
+`task show`、`task start` 默认提供 `context` 地址清单：完整要求、参考文件、已有交接和报告。前置任务用 `task reference attach <ID> --path <项目内文件> --summary "用途"` 登记参考后，后继沿依赖自动取得其路径与摘要；无需复制文件登记。reference 默认 live，可用 `--snapshot` 固定版本。四类附件 reference/report/log/handoff 均支持可选 summary，HTML 标签也会显示它。
+
+`show` 与 `show --handoff` 默认不展开正文，可用 `--manifest` 明确指定；需要时传 `--expand content --expand report` 或 `--expand-path <文件>`，先加 `--preview` 查看体量。用 `--exclude-path <精确路径>` 排除文件；仅供用户的附件在 attach 时加 `--audience user`，已有附件用 `task output set-audience` 补标。HTML 仍可阅读这些附件。旧版自动聚合 handoff 默认隔离，详见 [交接与用途规则](references/controller-workflow.md)。
 
 成功修改会生成目标项目中的 `.task-graph/generated/index.html`。直接编辑要求文件后，执行 `build --cwd /path/to/project` 刷新视图。
 

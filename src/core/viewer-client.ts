@@ -88,11 +88,11 @@ export const VIEWER_JS = String.raw`
   function documentsFor(task) {
     return task.documents || { content: { id: 'content:inline', title: task.title, path: '', html: task.html }, reports: [], logs: [], handoffs: [], outputs: [] };
   }
-  var PANEL_LABELS = { overview: '概览', content: '任务要求', reports: '报告', logs: '工作记录', handoffs: '交接', outputs: '产物' };
+  var PANEL_LABELS = { overview: '概览', content: '任务要求', references: '参考', reports: '报告', logs: '工作记录', handoffs: '交接', outputs: '产物' };
   function tabsFor(task) {
     var docs = documentsFor(task);
     var tabs = [{ key: 'content', label: '任务要求' }];
-    ['reports', 'logs', 'handoffs', 'outputs'].forEach(function (key) {
+    ['references', 'reports', 'logs', 'handoffs', 'outputs'].forEach(function (key) {
       if (docs[key] && docs[key].length) tabs.push({ key: key, label: PANEL_LABELS[key] + ' · ' + docs[key].length });
     });
     return tabs;
@@ -551,6 +551,10 @@ export const VIEWER_JS = String.raw`
     if (chosen) {
       if (category !== 'content') html += '<button class="back-to-list" data-document-back="true">← 返回' + PANEL_LABELS[category] + '列表</button>';
       html += '<div class="document-heading"><strong>' + esc(chosen.title) + '</strong><small>' + esc(chosen.path || '') + '</small>';
+      if (chosen.summary) html += '<p>' + esc(chosen.summary) + '</p>';
+      if (chosen.audience === 'user') html += '<small>仅供用户阅读 · 不参与代理交接</small>';
+      if (chosen.source_task) html += '<small>来源任务：' + esc(chosen.source_task) + '</small>';
+      if (chosen.read_path && chosen.read_path !== chosen.path) html += '<small>读取地址：' + esc(chosen.read_path) + '</small>';
       if (chosen.addedAt || chosen.actor) html += '<small>' + esc([chosen.addedAt, chosen.actor].filter(Boolean).join(' · ')) + '</small>';
       if (chosen.snapshot) html += '<span class="snapshot-label">已保存交付快照</span>';
       html += '</div><article class="document-content">';
@@ -560,9 +564,17 @@ export const VIEWER_JS = String.raw`
       html += '</article>';
     } else {
       html += '<h2>' + esc(PANEL_LABELS[category]) + ' <span class="muted">' + entries.length + '</span></h2><div class="document-list">';
+      var previousScope = null;
       entries.forEach(function (doc) {
+        if (category === 'references' && doc.scope !== previousScope) {
+          html += '<h3>' + (doc.scope === 'self' ? '本任务提供的参考' : '依赖提供的参考') + '</h3>'; previousScope = doc.scope;
+        }
         html += '<button class="document-item" data-document="' + esc(doc.id) + '"><strong>' + esc(doc.title) + '</strong>' +
           '<small>' + esc([doc.addedAt, doc.actor].filter(Boolean).join(' · ')) + '</small><small>' + esc(doc.path) + '</small>' +
+          (doc.summary ? '<p>' + esc(doc.summary) + '</p>' : '') +
+          (doc.audience === 'user' ? '<small>仅供用户阅读 · 不参与代理交接</small>' : '') +
+          (doc.source_task ? '<small>来源：' + esc(doc.source_task) + ' · ' + (doc.snapshot ? '固定快照' : '当前文件') + '</small>' : '') +
+          (doc.read_path && doc.read_path !== doc.path ? '<small>读取：' + esc(doc.read_path) + '</small>' : '') +
           (doc.error ? '<span class="document-error">文件不可读</span>' : '') + '</button>';
       });
       html += '</div>';

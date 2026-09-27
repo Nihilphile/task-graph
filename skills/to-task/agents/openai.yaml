@@ -1,0 +1,4 @@
+interface:
+  display_name: "To Task · 规划落图"
+  short_description: "将已确认的规划拆成可派工任务，关联完整要求、依赖与可审计看板"
+  default_prompt: "使用 $to-task 将当前确认的需求拆成可独立验收的任务，并写入 task-graph。"

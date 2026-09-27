@@ -1,0 +1,1306 @@
+[
+  {
+    "id": "task-graph@0.1.0",
+    "name": "task-graph",
+    "version": "0.1.0",
+    "size": 242570,
+    "unpackedSize": 1040915,
+    "shasum": "6859e29c2ad290c507cb5c9cb8fb82aa82d1391d",
+    "integrity": "sha512-6SgB9ZaIWVQ/wuLwde19qlVXHk9L73bLRJWGjYIZWoguDrv54ij2cYM+sIgrNhZPo4l9BDVtUDkk97sV8u3P2g==",
+    "filename": "task-graph-0.1.0.tgz",
+    "files": [
+      {
+        "path": "README.md",
+        "size": 3560,
+        "mode": 420
+      },
+      {
+        "path": "SKILL.md",
+        "size": 17965,
+        "mode": 420
+      },
+      {
+        "path": "agents/openai.yaml",
+        "size": 1840,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli.d.ts",
+        "size": 31,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli.js",
+        "size": 112,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/args.d.ts",
+        "size": 1138,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/args.js",
+        "size": 3354,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/build.d.ts",
+        "size": 103,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/build.js",
+        "size": 1257,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/github.d.ts",
+        "size": 107,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/github.js",
+        "size": 3265,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/graph-add.d.ts",
+        "size": 106,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/graph-add.js",
+        "size": 2636,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/help.d.ts",
+        "size": 925,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/help.js",
+        "size": 3274,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/init.d.ts",
+        "size": 102,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/init.js",
+        "size": 2170,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/skill-validate.d.ts",
+        "size": 283,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/skill-validate.js",
+        "size": 1817,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/source-add.d.ts",
+        "size": 140,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/source-add.js",
+        "size": 1848,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-add.d.ts",
+        "size": 105,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-add.js",
+        "size": 4461,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-annotations.d.ts",
+        "size": 124,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-annotations.js",
+        "size": 3460,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-blockers.d.ts",
+        "size": 174,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-blockers.js",
+        "size": 2664,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-claims.d.ts",
+        "size": 170,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-claims.js",
+        "size": 4613,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-composite.d.ts",
+        "size": 213,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-composite.js",
+        "size": 5235,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-documents.d.ts",
+        "size": 122,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-documents.js",
+        "size": 3015,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-inspect.d.ts",
+        "size": 121,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-inspect.js",
+        "size": 5594,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-links.d.ts",
+        "size": 169,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-links.js",
+        "size": 3780,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-revise.d.ts",
+        "size": 108,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-revise.js",
+        "size": 3359,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-status.d.ts",
+        "size": 177,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/task-status.js",
+        "size": 5117,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/validate.d.ts",
+        "size": 106,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/commands/validate.js",
+        "size": 1638,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/context.d.ts",
+        "size": 1235,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/context.js",
+        "size": 86,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/execution-guidance.d.ts",
+        "size": 302,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/execution-guidance.js",
+        "size": 1114,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/main.d.ts",
+        "size": 614,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/main.js",
+        "size": 4994,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/paths.d.ts",
+        "size": 163,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/paths.js",
+        "size": 235,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/registry.d.ts",
+        "size": 260,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/cli/registry.js",
+        "size": 1789,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/annotations.d.ts",
+        "size": 712,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/annotations.js",
+        "size": 3631,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/blockers.d.ts",
+        "size": 661,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/blockers.js",
+        "size": 1894,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/build.d.ts",
+        "size": 998,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/build.js",
+        "size": 2002,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/claims.d.ts",
+        "size": 2135,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/claims.js",
+        "size": 5334,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/composites.d.ts",
+        "size": 2409,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/composites.js",
+        "size": 6842,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/dag.d.ts",
+        "size": 1267,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/dag.js",
+        "size": 2981,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/deps.d.ts",
+        "size": 1690,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/deps.js",
+        "size": 7247,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/documents.d.ts",
+        "size": 2805,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/documents.js",
+        "size": 11973,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/errors.d.ts",
+        "size": 731,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/errors.js",
+        "size": 1005,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/fsx.d.ts",
+        "size": 1040,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/fsx.js",
+        "size": 1984,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/github-client.d.ts",
+        "size": 272,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/github-client.js",
+        "size": 1781,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/github-plan.d.ts",
+        "size": 882,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/github-plan.js",
+        "size": 6490,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/github-state.d.ts",
+        "size": 999,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/github-state.js",
+        "size": 2273,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/github-sync.d.ts",
+        "size": 201,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/github-sync.js",
+        "size": 11832,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/graphs.d.ts",
+        "size": 1305,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/graphs.js",
+        "size": 3930,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/init.d.ts",
+        "size": 1246,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/init.js",
+        "size": 2549,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/layout.d.ts",
+        "size": 1147,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/layout.js",
+        "size": 1393,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/lifecycle.d.ts",
+        "size": 1917,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/lifecycle.js",
+        "size": 6906,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/lock.d.ts",
+        "size": 1773,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/lock.js",
+        "size": 4184,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/markdown.d.ts",
+        "size": 136,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/markdown.js",
+        "size": 290,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/mutate.d.ts",
+        "size": 1067,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/mutate.js",
+        "size": 1999,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/planning.d.ts",
+        "size": 579,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/planning.js",
+        "size": 12290,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/project.d.ts",
+        "size": 2391,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/project.js",
+        "size": 11562,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/projection.d.ts",
+        "size": 3034,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/projection.js",
+        "size": 6358,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/readiness.d.ts",
+        "size": 1567,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/readiness.js",
+        "size": 2499,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/repo.d.ts",
+        "size": 1622,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/repo.js",
+        "size": 4070,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/skill.d.ts",
+        "size": 1103,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/skill.js",
+        "size": 6439,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/sources.d.ts",
+        "size": 937,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/sources.js",
+        "size": 2637,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/task-context.d.ts",
+        "size": 1213,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/task-context.js",
+        "size": 3780,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/task.d.ts",
+        "size": 5586,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/task.js",
+        "size": 24096,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/taskops.d.ts",
+        "size": 3242,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/taskops.js",
+        "size": 9354,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/time.d.ts",
+        "size": 422,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/time.js",
+        "size": 1066,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/transaction.d.ts",
+        "size": 2078,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/transaction.js",
+        "size": 4185,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/validate.d.ts",
+        "size": 1458,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/validate.js",
+        "size": 12757,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/viewer-client.d.ts",
+        "size": 40,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/viewer-client.js",
+        "size": 37033,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/viewer.d.ts",
+        "size": 679,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/viewer.js",
+        "size": 13269,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/yaml-io.d.ts",
+        "size": 498,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/core/yaml-io.js",
+        "size": 1447,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/index.d.ts",
+        "size": 1547,
+        "mode": 420
+      },
+      {
+        "path": "dist/src/index.js",
+        "size": 1376,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/github-sync.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/github-sync.test.js",
+        "size": 17029,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/helpers/temp.d.ts",
+        "size": 2306,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/helpers/temp.js",
+        "size": 5988,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/helpers/viewer-dom.d.ts",
+        "size": 2165,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/helpers/viewer-dom.js",
+        "size": 4734,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/helpers/viewer-fixture.d.ts",
+        "size": 1901,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/helpers/viewer-fixture.js",
+        "size": 4243,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/reference-context.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/reference-context.test.js",
+        "size": 11264,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/task-take.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/task-take.test.js",
+        "size": 4723,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-001-scaffold.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-001-scaffold.test.js",
+        "size": 5271,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-002-project-manifest.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-002-project-manifest.test.js",
+        "size": 9329,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-003-task-document.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-003-task-document.test.js",
+        "size": 12852,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-004-repository.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-004-repository.test.js",
+        "size": 7754,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-005-transaction.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-005-transaction.test.js",
+        "size": 10360,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-006-validation.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-006-validation.test.js",
+        "size": 11514,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-007-init-graphs.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-007-init-graphs.test.js",
+        "size": 11372,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-008-task-operations.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-008-task-operations.test.js",
+        "size": 13151,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-009-lifecycle.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-009-lifecycle.test.js",
+        "size": 10281,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-010-claims.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-010-claims.test.js",
+        "size": 12949,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-011-dependencies.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-011-dependencies.test.js",
+        "size": 13428,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-012-readiness.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-012-readiness.test.js",
+        "size": 10817,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-013-composites.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-013-composites.test.js",
+        "size": 13221,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-014-gates.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-014-gates.test.js",
+        "size": 13205,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-015-sources.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-015-sources.test.js",
+        "size": 9503,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-016-projection.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-016-projection.test.js",
+        "size": 9045,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-017-html-shell.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-017-html-shell.test.js",
+        "size": 5539,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-018-viewer-relations.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-018-viewer-relations.test.js",
+        "size": 9127,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-019-viewer-state.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-019-viewer-state.test.js",
+        "size": 6377,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-020-viewer-navigation.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-020-viewer-navigation.test.js",
+        "size": 6497,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-021-viewer-filters.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-021-viewer-filters.test.js",
+        "size": 9120,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-022-skill.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-022-skill.test.js",
+        "size": 4740,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-023-e2e.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-023-e2e.test.js",
+        "size": 15291,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-024-friction.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-024-friction.test.js",
+        "size": 3106,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-025-task-documents.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-025-task-documents.test.js",
+        "size": 10486,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-026-viewer-documents.test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/tests/us-026-viewer-documents.test.js",
+        "size": 5724,
+        "mode": 420
+      },
+      {
+        "path": "package.json",
+        "size": 1058,
+        "mode": 420
+      },
+      {
+        "path": "skills/task-take/SKILL.md",
+        "size": 5101,
+        "mode": 420
+      },
+      {
+        "path": "src/cli.ts",
+        "size": 113,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/args.ts",
+        "size": 3891,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/build.ts",
+        "size": 1275,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/github.ts",
+        "size": 2821,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/graph-add.ts",
+        "size": 2563,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/help.ts",
+        "size": 3425,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/init.ts",
+        "size": 2048,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/skill-validate.ts",
+        "size": 1741,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/source-add.ts",
+        "size": 1720,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/task-add.ts",
+        "size": 4158,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/task-annotations.ts",
+        "size": 3428,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/task-blockers.ts",
+        "size": 2880,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/task-claims.ts",
+        "size": 4634,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/task-composite.ts",
+        "size": 5320,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/task-documents.ts",
+        "size": 2788,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/task-inspect.ts",
+        "size": 5125,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/task-links.ts",
+        "size": 3846,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/task-revise.ts",
+        "size": 3090,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/task-status.ts",
+        "size": 5307,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/commands/validate.ts",
+        "size": 1553,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/context.ts",
+        "size": 1173,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/execution-guidance.ts",
+        "size": 1114,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/main.ts",
+        "size": 4792,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/paths.ts",
+        "size": 340,
+        "mode": 420
+      },
+      {
+        "path": "src/cli/registry.ts",
+        "size": 1943,
+        "mode": 420
+      },
+      {
+        "path": "src/core/annotations.ts",
+        "size": 3822,
+        "mode": 420
+      },
+      {
+        "path": "src/core/blockers.ts",
+        "size": 2128,
+        "mode": 420
+      },
+      {
+        "path": "src/core/build.ts",
+        "size": 2489,
+        "mode": 420
+      },
+      {
+        "path": "src/core/claims.ts",
+        "size": 6341,
+        "mode": 420
+      },
+      {
+        "path": "src/core/composites.ts",
+        "size": 8084,
+        "mode": 420
+      },
+      {
+        "path": "src/core/dag.ts",
+        "size": 3144,
+        "mode": 420
+      },
+      {
+        "path": "src/core/deps.ts",
+        "size": 8252,
+        "mode": 420
+      },
+      {
+        "path": "src/core/documents.ts",
+        "size": 13360,
+        "mode": 420
+      },
+      {
+        "path": "src/core/errors.ts",
+        "size": 1116,
+        "mode": 420
+      },
+      {
+        "path": "src/core/fsx.ts",
+        "size": 2074,
+        "mode": 420
+      },
+      {
+        "path": "src/core/github-client.ts",
+        "size": 1966,
+        "mode": 420
+      },
+      {
+        "path": "src/core/github-plan.ts",
+        "size": 6711,
+        "mode": 420
+      },
+      {
+        "path": "src/core/github-state.ts",
+        "size": 2903,
+        "mode": 420
+      },
+      {
+        "path": "src/core/github-sync.ts",
+        "size": 10691,
+        "mode": 420
+      },
+      {
+        "path": "src/core/graphs.ts",
+        "size": 4840,
+        "mode": 420
+      },
+      {
+        "path": "src/core/init.ts",
+        "size": 3322,
+        "mode": 420
+      },
+      {
+        "path": "src/core/layout.ts",
+        "size": 1761,
+        "mode": 420
+      },
+      {
+        "path": "src/core/lifecycle.ts",
+        "size": 7316,
+        "mode": 420
+      },
+      {
+        "path": "src/core/lock.ts",
+        "size": 4610,
+        "mode": 420
+      },
+      {
+        "path": "src/core/markdown.ts",
+        "size": 300,
+        "mode": 420
+      },
+      {
+        "path": "src/core/mutate.ts",
+        "size": 2409,
+        "mode": 420
+      },
+      {
+        "path": "src/core/planning.ts",
+        "size": 11732,
+        "mode": 420
+      },
+      {
+        "path": "src/core/project.ts",
+        "size": 12202,
+        "mode": 420
+      },
+      {
+        "path": "src/core/projection.ts",
+        "size": 8182,
+        "mode": 420
+      },
+      {
+        "path": "src/core/readiness.ts",
+        "size": 3495,
+        "mode": 420
+      },
+      {
+        "path": "src/core/repo.ts",
+        "size": 4744,
+        "mode": 420
+      },
+      {
+        "path": "src/core/skill.ts",
+        "size": 6478,
+        "mode": 420
+      },
+      {
+        "path": "src/core/sources.ts",
+        "size": 3177,
+        "mode": 420
+      },
+      {
+        "path": "src/core/task-context.ts",
+        "size": 4598,
+        "mode": 420
+      },
+      {
+        "path": "src/core/task.ts",
+        "size": 26609,
+        "mode": 420
+      },
+      {
+        "path": "src/core/taskops.ts",
+        "size": 11295,
+        "mode": 420
+      },
+      {
+        "path": "src/core/time.ts",
+        "size": 1102,
+        "mode": 420
+      },
+      {
+        "path": "src/core/transaction.ts",
+        "size": 4762,
+        "mode": 420
+      },
+      {
+        "path": "src/core/validate.ts",
+        "size": 12193,
+        "mode": 420
+      },
+      {
+        "path": "src/core/viewer-client.ts",
+        "size": 37032,
+        "mode": 420
+      },
+      {
+        "path": "src/core/viewer.ts",
+        "size": 13118,
+        "mode": 420
+      },
+      {
+        "path": "src/core/yaml-io.ts",
+        "size": 1555,
+        "mode": 420
+      },
+      {
+        "path": "src/index.ts",
+        "size": 1547,
+        "mode": 420
+      }
+    ],
+    "entryCount": 258,
+    "bundled": []
+  }
+]

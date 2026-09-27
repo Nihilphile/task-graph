@@ -21,7 +21,8 @@ description: >-
 - **依赖（depends_on）**：例如 B 依赖 A，表示 A 完成后 B 才能开始。一个任务可依赖多个前置任务，所有依赖都满足才就绪。工具拒绝循环依赖。
 - **状态与就绪**：`status` 是已记录的 todo（待开始）、in_progress（执行中）、done（完成）、cancelled（取消）；`readiness` 是根据依赖和人工阻塞计算的 ready 或 blocked。ready 本身不表示任务待执行。
 - **领取（claim）**：记录由哪个角色、哪个实际 Agent 会话负责。领取本身不启动 Agent。
-- **交接（handoff）**：把完整要求、前置产物和已有进展汇成一份可交给执行者的上下文；可以只预览，也可以保存当时的快照。
+- **交接（handoff）**：默认提供任务事实及文件索引，按需显式展开正文；保存快照时冻结当前要求并保留附件索引。
+- **参考（reference）**：任务提供给后继 Agent 的代码索引或接入说明。文件由产出任务登记，后继沿直接依赖读取；与同一任务接续执行的 handoff 分开。
 
 Task Graph 不负责启动或停止 Agent、检测会话失败、自动释放领取、重试或重新调度。主控使用所在环境的调度工具完成派工，并在本工具记录责任人和结果。
 
@@ -73,7 +74,7 @@ CLI graph add --title "功能交付" --entry --cwd "<项目根目录>" --json
 
 ## 3. 写一次完整要求，再绑定任务
 
-先在项目内创建文件，例如 `doc/tasks/implementation.md`，写清执行者需要知道的目标、范围、输入、约束、完成条件与交付位置。正文格式自由；下面仅是最小示例：
+先在项目内创建文件，例如 `doc/tasks/implementation.md`，写清执行者需要知道的目标、范围、输入、约束、完成条件与交付位置。假设执行者没有原聊天上下文：必要背景与已确认决定写入正文，外部资料给出已核实的路径和章节/符号/版本，并说明读取用途。父任务要求不会自动继承给子任务。正文格式自由；下面仅是最小示例：
 
 ```markdown
 # 实现功能
@@ -117,7 +118,9 @@ CLI task show T-0001 --handoff --cwd "<项目根目录>" --json
 
 列表可能同时包含复合父任务和子任务：父任务 ready 表示可以开始统筹，完成它仍须满足子任务完成目标。派工前用 `task show <ID> --json` 查看 `task.subgraph` 和要求，区分父任务的统筹职责与子任务的具体工作，避免重复派发同一范围。
 
-主控通过当前环境的调度方式交付任务：提供项目路径、CLI 入口、task ID，以及上述完整交接内容或任务要求路径。获得实际执行会话 ID 后记录开始：
+主控通过当前环境的调度方式交付任务：提供项目路径、CLI 入口、task ID 和任务要求入口。获得实际执行会话 ID 后记录开始：
+
+派工前查看当前清单，按需阅读要求和必读引用，核对必要输入齐全。handoff 不递归展开正文链接；ready 和 validate 只反映工具能够计算的关系与结构，不保证上下文充分。影响开工的信息缺口先补齐，或用依赖/task block 记录解除条件。重新接手从当前 task show 查询恢复。
 
 ```text
 CLI task start T-0001 --role implementer --session-id "<实际会话ID>" --cwd "<项目根目录>" --json
@@ -125,6 +128,22 @@ CLI task log T-0001 --text "实现完成，正在验证" --cwd "<项目根目录
 ```
 
 `start` 同时领取、改为执行中并保存交接快照；role/session-id 成对提供。它会拒绝未就绪任务和冲突的领取。执行者自行开始时同样使用自己的实际会话 ID；同一次执行由主控或执行者中的一方记录开始即可。
+
+`start/reopen/show` 的成功响应还返回 `guidance.skill_path`：随工具提供的 [task-take](skills/task-take/SKILL.md) 的实际绝对路径。主控派工时让执行者读取该指南即可；已由主控 start 的执行者用 show 恢复，避免重复 start。task-take 负责阅读要求和必要参考、写接手记录后直接开工、记录缺口与阻塞，以及完工前登记后继所需 reference。接手记录不需要主控二次批准；交付信息回填工作记录和附件。指南路径只存在于 CLI 响应，不写入任务或交接快照。
+
+`task show`（包括 `--handoff`）默认仅返回任务事实和文件清单，可用 `--manifest` 明确指定。JSON 不再默认提供 task.body、历史正文和附件 body/html。`task start/reopen` 同样返回 context，包含 project_root、content、references、reports、logs、handoffs、outputs 和 excluded。path 是原来源，read_path 是实际读取文件（可能是快照），均相对 project_root。条目保留 source_task、scope、mode 和可选 summary；不可读时有 error。参考、报告及普通产物收集自身和直接依赖，日志与交接只收集自身。
+
+正文需显式选择：`task show T-0001 --expand content --expand report --json`，或重复 `--expand-path <项目相对来源或快照路径>` 指定文件。加 `--handoff` 将同一选择排成 Markdown；加 `--preview` 先返回所选条目、字节数及字符数估计，不读附件正文。用重复的 `--exclude-path <精确路径>` 排除文件，排除优先于展开；不支持通配符。完整用法与兼容变化见主控接口参考。
+
+仅供用户的附件在 attach 时加 `--audience user`。已有附件用 `task output set-audience T-0001 --path <来源路径> --audience user` 补标，同路径所有版本一起更新；HTML 继续展示，代理清单和显式展开均排除。未标记的普通附件默认 agent。旧版自动生成的聚合 handoff 可能含已排除正文，默认隔离并报告 legacy_aggregate；主控审阅后可显式标为 agent。用途标记不是文件访问权限，也不会回溯清洗历史正文。
+
+实现完成后，按后继需要绑定接入说明或已有代码文件：
+
+```text
+CLI task reference attach T-0001 --path doc/references/implementation.md --summary "接口约定、代码入口与验证方法" --cwd "<项目根目录>" --json
+```
+
+reference 默认读取当前文件，用 `--snapshot` 保留固定交付版本。report/log/handoff/reference 的 attach 均支持可选 `--summary` 和 `--title`；未填 title 时用文件名。summary 介绍附件，与任务节点的 summary 分开。报告、交接默认快照，日志保持 live；生成交接的 `task handoff create` 也支持摘要。
 
 执行者写好报告，主控或执行者按已约定的验收责任确认完成条件后：
 
@@ -149,6 +168,8 @@ CLI build --cwd "<项目根目录>" --json
 把 `<项目根目录>/.task-graph/generated/index.html` 的实际路径交给用户。HTML 只读，不承担回写编辑。
 
 单击节点局部放大，再点同一主体、空白处或按 Esc 恢复；双击复合任务进入子图。任务要求标签打开完整正文；报告、工作记录、交接标签先显示文件列表，再打开具体文件。旧任务无外部 content 时读取自身 Markdown 正文。
+
+参考标签按“本任务提供／依赖提供”分组列出路径、摘要和来源，点条目打开内容。普通依赖只读取直接前置登记；局部完成点读取父任务及 gate.requires 对应子任务登记，同一来源只列一次。不递归收集所有祖先或无关子任务。
 
 完成操作后，报告修改的 task ID、校验结果和 HTML 路径；若尚有阻塞，一并说明。查询即可回答的问题只执行查询。
 
@@ -212,11 +233,13 @@ CLI graph add --title "功能交付" --entry --gh --cwd "<项目根目录>" --js
 | `task report attach` | 附加一份报告，保留交付快照 |
 | `task log attach` | 附加独立的工作记录文件 |
 | `task handoff attach` | 附加独立交接文件，保留交付快照 |
-| `task handoff create` | 保存当前要求、前置产物和进展的交接快照 |
+| `task handoff create` | 保存当前要求正文与附件索引，避免复制报告或历史全文 |
+| `task reference attach` | 登记供后继读取的参考文件，可选 summary/title；默认 live，可用 --snapshot 固定版本 |
 | `task output add` | 登记项目根目录相对路径的结构化产物；文件可稍后创建 |
 | `task output remove` | 移除指定路径的产物记录（包括同路径多个版本），保留文件 |
+| `task output set-audience` | 标记同一来源路径所有附件版本为 agent 或 user，保留快照 |
 | `task list` | 从源文件列出任务、状态、就绪状态与阻塞原因；支持 `--json` 和筛选 |
-| `task show` | 从源文件查看单个任务的正文、产物、历史与阻塞原因；支持 `--json` |
+| `task show` | 默认查看事实和文件清单；按类别/路径显式展开，支持预览体量与路径排除 |
 | `task start` | 将 `todo` 改为 `in_progress`；已完成任务须显式重新打开 |
 | `task complete` | 完成任务并结束领取；可同时附加报告和记录；复合任务须满足完成目标 |
 | `task cancel` | 取消 `todo` 或 `in_progress` 任务；`cancelled` 为终态 |

@@ -63,6 +63,8 @@ export function planGitHub(root: string): GitHubPlan {
     body += `Manual blockers: ${task.manualBlockers.join('; ') || '—'}\n\n`;
     const artifacts = task.outputs.filter(output => !output.kind);
     if (artifacts.length) body += `Artifacts (project-relative paths): ${artifacts.map(output => output.path).join(', ')}\n\n`;
+    const references = task.outputs.filter(output => output.kind === 'reference');
+    if (references.length) body += '## References (project-relative files)\n' + references.map(output => `- ${output.title ?? output.path}: \`${output.path}\` (${output.snapshot ? 'snapshot: ' + output.snapshot : 'live'})${output.summary ? ' — ' + output.summary : ''}`).join('\n') + '\n\n';
     if (content.length > 35000) {
       body += 'Full task requirements are published in comments (content version ' + digest(content).slice(0, 12) + ').';
       comment(task.id, 'content:' + digest(content), '# Task requirements\n\n' + content);
@@ -78,7 +80,7 @@ export function planGitHub(root: string): GitHubPlan {
       }
     });
     for (const output of task.outputs) {
-      if (!output.kind) continue; // Planned generic outputs may not exist yet; report attach is explicit.
+      if (!output.kind || output.kind === 'reference') continue; // References publish an index, not source file contents.
       if (output.kind === 'log' && output.path === `.task-graph/logs/${task.id}.md`) continue;
       const bytes = readDocument(root, output.snapshot ?? output.path);
       const hash = createHash('sha256').update(bytes).digest('hex');
@@ -86,7 +88,7 @@ export function planGitHub(root: string): GitHubPlan {
       const text = /\.(md|markdown|txt|log|json|ya?ml|csv)$/i.test(path.extname(output.path))
         ? bytes.toString('utf8') : 'Binary artifact retained locally; this comment contains its metadata only.';
       comment(task.id, `${output.kind ?? 'report'}:${output.path}:${hash}`,
-        `## ${output.kind ?? 'report'} · ${output.title ?? output.path}\n\nFile: \`${output.path}\`\nSHA-256: \`${hash}\`\n${output.addedAt ?? ''}\n\n${text}`);
+        `## ${output.kind ?? 'report'} · ${output.title ?? output.path}\n\n${output.summary ? output.summary + '\n\n' : ''}File: \`${output.path}\`\nSHA-256: \`${hash}\`\n${output.addedAt ?? ''}\n\n${text}`);
     }
   }
   return { entities, comments, fingerprint: digest(JSON.stringify({ entities, comments })) };

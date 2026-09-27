@@ -6,6 +6,7 @@ import { loadTaskRepository } from './repo.js';
 import type { TaskClaim, TaskOutput, TaskSubgraph, TaskDependency } from './task.js';
 import { taskDocuments, type TaskDocuments } from './documents.js';
 import type { TaskHistoryEntry } from './task.js';
+import { referenceDocuments } from './task-context.js';
 import { githubTargets, planGitHub } from './github-plan.js';
 import { githubView, readGitHubState, type GitHubView, type GitHubState } from './github-state.js';
 
@@ -119,7 +120,7 @@ export function createGraphProjection(root: string): GraphProjection {
     graph: task.graph,
     title: task.title,
     ...remoteView(task.graph, task.id),
-    documents: taskDocuments(root, task),
+    documents: { ...taskDocuments(root, task), references: referenceDocuments(root, task, repository) },
     history: task.history,
     status: task.status,
     claim: task.claim,

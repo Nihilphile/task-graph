@@ -17,6 +17,8 @@
   "files": [
     "SKILL.md",
     "agents",
+    "references",
+    "skills",
     "dist",
     "src"
   ],
@@ -26,6 +28,7 @@
     "clean": "node scripts/clean.mjs",
     "test": "npm run build && node --test --test-isolation=none \"dist/tests/**/*.test.js\"",
     "test:only": "node --test --test-isolation=none \"dist/tests/**/*.test.js\"",
+    "test:workflow": "node --test skills/to-task/tests/workflow.test.mjs",
     "task-graph": "node dist/src/cli.js"
   },
   "dependencies": {
