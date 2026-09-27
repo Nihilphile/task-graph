@@ -2,8 +2,8 @@ export const VIEWER_JS = String.raw`
 (function () {
   "use strict";
   var DATA = JSON.parse(document.getElementById("graph-data").textContent);
-  var STATUS_ORDER = ["todo", "in_progress", "done", "cancelled"];
-  var STATUS_LABEL = { todo: "Todo", in_progress: "Running", done: "Finished", cancelled: "Cancelled" };
+  var STATUS_ORDER = ["todo", "in_progress", "done", "reject", "cancelled"];
+  var STATUS_LABEL = { todo: "Todo", in_progress: "Running", done: "Finished", reject: "Rejected", cancelled: "Cancelled" };
   var STATUS_ICON = { done: "\u2713", in_progress: "\u25cf", cancelled: "\u00d7" };
   var READINESS_ICON = { ready: "\u25b6", blocked: "!" };
   var TARGET_MARKER = "\u25c6";
@@ -42,12 +42,14 @@ export const VIEWER_JS = String.raw`
       .sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
   };
   var visualState = function (task) {
+    if (task.status === 'reject') return 'blocked';
     if (task.status === "cancelled") return "cancelled";
     if (task.status === "done") return "done";
     if (task.status === "in_progress") return "running";
     return task.readiness === "ready" ? "ready" : "blocked";
   };
   var nodeIcon = function (task) {
+    if (task.status === 'reject') return '\u2717';
     if (task.status === "cancelled") return STATUS_ICON.cancelled;
     if (task.status === "done") return STATUS_ICON.done;
     if (task.status === "in_progress") return STATUS_ICON.in_progress;
@@ -354,6 +356,9 @@ export const VIEWER_JS = String.raw`
     var selected = visible.find(function (task) { return task.id === state.task; });
     if (selected) viewport.appendChild(renderNode(selected, positions[selected.id]));
     var boxes = Object.keys(positions).map(function (id) { return positions[id]; }).concat(Object.keys(sourcePositions).map(function (id) { return sourcePositions[id]; }));
+    var bookBox = { x: PAD, y: boxes.length ? Math.max.apply(null, boxes.map(function (b) { return b.y + b.height; })) + GAP_Y : PAD, width: NODE_W, height: 88 };
+    viewport.appendChild(renderErrorBookNode(bookBox));
+    boxes.push(bookBox);
     if (boxes.length) {
       var minX = Math.min.apply(null, boxes.map(function (b) { return b.x; })), minY = Math.min.apply(null, boxes.map(function (b) { return b.y; }));
       graphBounds = { x: minX, y: minY,
@@ -376,6 +381,40 @@ export const VIEWER_JS = String.raw`
       : "Filtering " + activeFilters().join(", ") + " \u2014 " + visible.length + "/" + all.length + " task(s).";
   }
 
+  function currentErrorBook() {
+    var included = {}; included[state.graph] = true;
+    var changed = true;
+    while (changed) {
+      changed = false;
+      DATA.tasks.forEach(function (task) {
+        if (included[task.graph] && task.subgraph && !included[task.subgraph.graph]) { included[task.subgraph.graph] = true; changed = true; }
+      });
+    }
+    return (DATA.errorBook || []).filter(function (entry) { return included[entry.graph]; });
+  }
+  function renderErrorBookNode(position) {
+    var group = svgEl('g', { class: 'node error-book' + (state.panel === 'error-book' ? ' selected' : ''),
+      transform: 'translate(' + position.x + ',' + position.y + ')', 'data-kind': 'error-book', tabindex: 0, role: 'button', 'aria-label': '打开 error-book 错题本' });
+    group.appendChild(svgEl('rect', { class: 'node-body', width: position.width, height: position.height, rx: 8 }));
+    var title = svgEl('text', { class: 'title', x: 14, y: 29 }); title.textContent = 'error-book · 错题本'; group.appendChild(title);
+    var subtitle = svgEl('text', { class: 'meta', x: 14, y: 56 }); subtitle.textContent = '点击阅读失败小报告'; group.appendChild(subtitle);
+    return group;
+  }
+  function renderErrorBook(body) {
+    var entries = currentErrorBook();
+    var html = '<h3>error-book · 错题本</h3><p class="muted">当前图及子图 · 按时间追加</p>';
+    if (!entries.length) html += '<p>暂无失败小报告。</p>';
+    entries.forEach(function (entry) {
+      html += '<article class="error-book-entry"><h4>' + esc(entry.at) + '</h4><p><button type="button" data-error-task="' + esc(entry.task) + '">' + esc(entry.task + ' · ' + entry.title) + '</button></p>';
+      if (entry.actor) html += '<p class="muted">Reviewer: ' + esc(entry.actor) + '</p>';
+      html += '<div class="markdown">' + (entry.report.html || '<p>' + esc(entry.report.error || '无法读取小报告') + '</p>') + '</div>';
+      if (entry.evidence.length) html += '<details><summary>本轮验收报告快照</summary>' + entry.evidence.map(function (file) {
+        return '<p><a target="_blank" rel="noopener" href="../../' + file.split('/').map(encodeURIComponent).join('/') + '">' + esc(file) + '</a></p>';
+      }).join('') + '</details>';
+      html += '</article>';
+    });
+    body.innerHTML = html;
+  }
   function edgePath(from, to) {
     var x1 = from.x + from.width, y1 = from.y + from.height / 2, x2 = to.x, y2 = to.y + to.height / 2;
     var bend = Math.max(30, (x2 - x1) / 2);
@@ -456,7 +495,8 @@ export const VIEWER_JS = String.raw`
     });
     group.appendChild(title);
     var meta = svgEl("text", { class: "meta", x: 14 * s, y: metrics.metaY, style: 'font-size:' + 11 * s + 'px' });
-    meta.textContent = (task.readiness === 'blocked' ? '存在阻塞' : '依赖已满足') + ' · ' + task.dependsOn.length + ' 个依赖';
+    var planLabel = { skeleton: '骨架', awaiting_review: '待主控细化', refined: '已细化', stale: '需重新细化' };
+    meta.textContent = (planLabel[task.planningState] || (task.readiness === 'blocked' ? '存在阻塞' : '依赖已满足')) + ' · ' + task.dependsOn.length + ' 个依赖';
     group.appendChild(meta);
     if (task.claim) {
       var claimText = task.claim.role + " / " + task.claim.sessionId;
@@ -489,12 +529,14 @@ export const VIEWER_JS = String.raw`
 
   function renderDetails() {
     var body = document.getElementById("details-body");
+    if (state.panel === 'error-book') { renderErrorBook(body); return; }
     var task = state.task ? tasksById[state.task] : null;
     if (!task) { body.innerHTML = githubBadge(graphsById[state.graph]) + '<p class="muted">Select a task node.</p>'; return; }
     if (state.panel !== 'overview') { renderDocumentPanel(task, body); return; }
     var blockers = task.blockedBy.map(function (reason) {
       if (reason.kind === "manual") return "manual: " + reason.text;
       if (reason.kind === "task") return "unmet dependency: " + reason.task;
+      if (reason.kind === "refinement") return "待主控细化: " + reason.state;
       return "unmet completion point: " + reason.task + ":" + reason.gate +
         (reason.tasks.length ? " (" + reason.tasks.join(", ") + ")" : "");
     });
@@ -502,6 +544,8 @@ export const VIEWER_JS = String.raw`
     html += "<h3>" + esc(task.id) + "</h3>" + panelNav(task) + '<dl>';
     html += "<dt>Graph</dt><dd>" + esc(task.graph) + "</dd>";
     html += "<dt>Status</dt><dd>" + esc(task.status) + "</dd>";
+    if (task.planningState && task.planningState !== 'static') html += '<dt>Planning</dt><dd>' + esc(task.planningState) + '</dd>';
+    if (task.kind === 'acceptance') html += '<dt>验收</dt><dd>' + esc(task.status === 'done' ? 'pass' : task.status === 'reject' ? 'reject' : '待验收') + '</dd>';
     html += "<dt>Readiness</dt><dd>" + esc(task.readiness) + "</dd>";
     html += "<dt>Claim</dt><dd>" + (task.claim ? esc(task.claim.role + " / " + task.claim.sessionId) : "\u2014") + "</dd>";
     html += "<dt>Blocked by</dt><dd>" + (blockers.length ? esc(blockers.join("; ")) : "\u2014") + "</dd>";
@@ -545,11 +589,11 @@ export const VIEWER_JS = String.raw`
   }
   function renderDocumentPanel(task, body) {
     var docs = documentsFor(task), category = state.panel;
-    var entries = category === 'content' ? [docs.content] : (docs[category] || []);
-    var chosen = category === 'content' ? docs.content : entries.find(function (doc) { return doc.id === state.document; });
+    var entries = category === 'content' ? (docs.contents || [docs.content]) : (docs[category] || []);
+    var chosen = category === 'content' && entries.length === 1 ? entries[0] : entries.find(function (doc) { return doc.id === state.document; });
     var html = '<h3>' + esc(task.id) + '</h3>' + panelNav(task);
     if (chosen) {
-      if (category !== 'content') html += '<button class="back-to-list" data-document-back="true">← 返回' + PANEL_LABELS[category] + '列表</button>';
+      if (category !== 'content' || entries.length > 1) html += '<button class="back-to-list" data-document-back="true">← 返回' + PANEL_LABELS[category] + '列表</button>';
       html += '<div class="document-heading"><strong>' + esc(chosen.title) + '</strong><small>' + esc(chosen.path || '') + '</small>';
       if (chosen.summary) html += '<p>' + esc(chosen.summary) + '</p>';
       if (chosen.audience === 'user') html += '<small>仅供用户阅读 · 不参与代理交接</small>';
@@ -610,7 +654,7 @@ export const VIEWER_JS = String.raw`
   function writeHash() {
     var hash = "#graph=" + encodeURIComponent(state.graph || "") +
       (state.task ? "&task=" + encodeURIComponent(state.task) : "") +
-      (state.task && state.panel !== 'overview' ? '&panel=' + encodeURIComponent(state.panel) : '') +
+      ((state.task && state.panel !== 'overview') || state.panel === 'error-book' ? '&panel=' + encodeURIComponent(state.panel) : '') +
       (state.task && state.document ? '&document=' + encodeURIComponent(state.document) : '');
     if (window.location.hash === hash) return;
     try {
@@ -631,6 +675,7 @@ export const VIEWER_JS = String.raw`
     var graphId = params.graph || (entry ? entry.id : null);
     if (!graphId) { renderGraph(); return; }
     selectGraph(graphId, params.task || null);
+    if (params.panel === 'error-book' && graphsById[state.graph]) { state.task = null; state.panel = 'error-book'; renderGraph(); renderDetails(); writeHash(); return; }
     if (state.task && PANEL_LABELS[params.panel]) {
       state.panel = params.panel; state.document = params.document || null;
       renderGraph(); renderDetails(); writeHash();
@@ -674,6 +719,11 @@ export const VIEWER_JS = String.raw`
   var svg = document.getElementById("graph");
   document.getElementById('details-body').addEventListener('click', function (event) {
     var button = event.target.closest('button');
+    if (button && button.hasAttribute('data-error-task')) {
+      var errorTask = tasksById[button.getAttribute('data-error-task')];
+      if (errorTask) selectGraph(errorTask.graph, errorTask.id);
+      return;
+    }
     if (!button || !state.task) return;
     if (button.hasAttribute('data-panel')) selectPanel(state.task, button.getAttribute('data-panel'));
     else if (button.hasAttribute('data-document')) {
@@ -687,6 +737,11 @@ export const VIEWER_JS = String.raw`
   });
   function activateCanvasTarget(target, keyboard) {
     if (!target || typeof target.closest !== 'function') return;
+    if (target.closest('[data-kind="error-book"]')) {
+      if (collapseTimer) clearTimeout(collapseTimer);
+      state.task = null; state.panel = 'error-book'; state.document = null;
+      renderGraph(); renderDetails(); writeHash(); return;
+    }
     var node = target.closest('.node[data-task]');
     if (!node) { if (!target.closest('.node')) selectTask(null); return; }
     var id = node.getAttribute('data-task'), task = tasksById[id];

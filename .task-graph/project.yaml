@@ -4,6 +4,7 @@ entry_graphs:
   - G-001
   - G-002
   - G-003
+  - G-004
 graphs:
   - id: G-001
     title: Reference 与任务接手上下文
@@ -11,4 +12,8 @@ graphs:
     title: Task Take 接手流程
   - id: G-003
     title: 代理交接按需读取
+  - id: G-004
+    title: 动态任务图与 Desktop 通知
+  - id: G-005
+    title: 动态任务图与 Desktop 通知
 sources: []

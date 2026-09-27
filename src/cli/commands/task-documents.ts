@@ -1,15 +1,15 @@
 import { EXIT_OK, type CommandSpec } from '../context.js';
-import { attachDocument, createHandoff, setDocumentAudience } from '../../core/documents.js';
+import { attachDocument, createHandoff, removeContent, setDocumentAudience } from '../../core/documents.js';
 import { usageError } from '../../core/errors.js';
 import { resolveCwd } from '../paths.js';
 
 export function taskDocumentCommands(): readonly CommandSpec[] {
   return [
-    ...(['report', 'log', 'handoff', 'reference'] as const).map((kind): CommandSpec => ({
+    ...(['content', 'report', 'log', 'handoff', 'reference'] as const).map((kind): CommandSpec => ({
       name: `task ${kind} attach`,
       summary: `Attach a ${kind} file for offline reading from a task label`,
       usage: `task-graph task ${kind} attach T-NNNN --path <file> [--title <text>] [--summary <text>] [--audience agent|user]${kind === 'reference' ? ' [--snapshot]' : ''} [--actor <name>] [--cwd <dir>] [--json]`,
-      details: [kind === 'reference' ? 'References follow the live file by default; --snapshot freezes a version. Successors discover references through task dependencies.' : kind === 'log' ? 'Log files are live references; task log appends to the managed work log.' : 'The file is snapshotted at attachment time for later audit. Markdown/text is embedded in the offline viewer.', 'Paths are relative to the project root. Files must exist. Summary is optional and describes the file.'],
+      details: [kind === 'content' ? 'Append a live requirements file. All content files jointly define the task; agent audience only. Start freezes the requirements for audit.' : kind === 'reference' ? 'References follow the live file by default; --snapshot freezes a version. Successors discover references through task dependencies.' : kind === 'log' ? 'Log files are live references; task log appends to the managed work log.' : 'The file is snapshotted at attachment time for later audit. Markdown/text is embedded in the offline viewer.', 'Paths are relative to the project root. Files must exist. Summary is optional and describes the file.'],
       run(ctx, args): number {
         const id = args.positionals[0];
         const file = args.opt('path');
@@ -22,6 +22,17 @@ export function taskDocumentCommands(): readonly CommandSpec[] {
         return EXIT_OK;
       },
     })),
+    {
+      name: 'task content remove', summary: 'Unbind a requirements file while retaining its bytes and history',
+      usage: 'task-graph task content remove T-NNNN --path <file> [--cwd <dir>] [--json]',
+      run(ctx, args) {
+        const id = args.positionals[0], file = args.opt('path');
+        if (!id || !file) throw usageError('Pass task ID and --path');
+        removeContent(resolveCwd(ctx, args), { id, path: file, actor: args.opt('actor'), now: () => ctx.now() });
+        if (args.flag('json')) ctx.io.out(JSON.stringify({ ok: true, task: { id } }));
+        return EXIT_OK;
+      },
+    },
     {
       name: 'task output set-audience', summary: 'Set the audience of all registered versions at a source path',
       usage: 'task-graph task output set-audience T-NNNN --path <file> --audience agent|user [--actor <name>] [--cwd <dir>] [--json]',

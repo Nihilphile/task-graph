@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { errorBookEntries, type ErrorBookEntry } from './error-book.js';
 import { projectPaths } from './layout.js';
 import { renderMarkdown } from './markdown.js';
 import { computeReadiness, type BlockedReason, type Readiness } from './readiness.js';
@@ -30,6 +31,8 @@ export interface ProjectedTask {
   readonly documents?: TaskDocuments;
   readonly history?: readonly TaskHistoryEntry[];
   readonly status: string;
+  readonly planningState?: string;
+  readonly kind?: string;
   readonly claim: TaskClaim | null;
   readonly dependsOn: readonly TaskDependency[];
   readonly manualBlockers: readonly string[];
@@ -52,6 +55,7 @@ export interface ProjectedEdge {
 }
 
 export interface GraphProjection {
+  readonly errorBook?: readonly ErrorBookEntry[];
   readonly version: number;
   readonly project: {
     readonly name: string;
@@ -123,6 +127,8 @@ export function createGraphProjection(root: string): GraphProjection {
     documents: { ...taskDocuments(root, task), references: referenceDocuments(root, task, repository) },
     history: task.history,
     status: task.status,
+    planningState: readiness.get(task.id)?.planningState ?? 'static',
+    kind: task.kind ?? 'work',
     claim: task.claim,
     dependsOn: task.dependsOn.map((dependency) =>
       dependency.gate === undefined
@@ -168,6 +174,7 @@ export function createGraphProjection(root: string): GraphProjection {
 
   return {
     version: PROJECTION_VERSION,
+    errorBook: errorBookEntries(repository, undefined, true),
     project: {
       name: manifest.name,
       schemaVersion: manifest.version,

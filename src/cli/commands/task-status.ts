@@ -4,6 +4,7 @@ import {
   cancelTask,
   completeTask,
   reopenTask,
+  rejectTask,
   startTask,
   type TransitionOptions,
 } from '../../core/lifecycle.js';
@@ -25,6 +26,12 @@ interface StatusCommandConfig {
 
 const COMMANDS: readonly StatusCommandConfig[] = [
   {
+    action: 'reject', summary: 'Record a failed result, release claim and keep successors blocked', verb: 'Rejected',
+    usage: 'task-graph task reject T-NNNN --error-report <file.md> --report <file> [--log <text>] [--reason <text>] [--actor <name>] [--cwd <dir>] [--json]',
+    details: ['Every rejection requires a non-empty Markdown --error-report for the error-book. Acceptance tasks also require a report. Reopen explicitly for another attempt; previous results stay in history. Reject does not satisfy dependencies or parent completion.'],
+    run: (root, options) => rejectTask(root, options),
+  },
+  {
     action: 'start',
     summary: 'Move a task from todo to in_progress',
     verb: 'Started',
@@ -34,7 +41,7 @@ const COMMANDS: readonly StatusCommandConfig[] = [
       'Dependencies and manual blockers must be satisfied; a handoff snapshot is saved at start.',
       'Pass --role and --session-id to claim and start in one transaction.',
       'Returns the task-take skill path: read context, log readiness, then work without a second approval.',
-      'A done task only moves back with --reopen, so finishing is never undone by accident.',
+      'A done or reject task only moves back with --reopen. Dynamic tasks also require a current refinement.',
       'A cancelled task is terminal and cannot be started.',
     ],
     run: (root, options) => startTask(root, options),
@@ -44,11 +51,12 @@ const COMMANDS: readonly StatusCommandConfig[] = [
     summary: 'Move a task from in_progress to done',
     verb: 'Completed',
     usage:
-      'task-graph task complete T-NNNN [--report <file>]... [--log <text>] [--reason <text>] [--actor <name>] [--cwd <dir>] [--json]',
+      'task-graph task complete T-NNNN [--result pass|reject] [--report <file>]... [--error-report <file.md>] [--log <text>] [--reason <text>] [--actor <name>] [--cwd <dir>] [--json]',
     details: [
       'Only a running task can be completed; todo -> done is not a supported transition.',
       'A composite task is refused until every completion_requires target is done.',
       'Reports, log, completion and claim release are saved atomically. Reports are snapshotted.',
+      'Acceptance tasks require an explicit --result and report. --result reject also requires --error-report <file.md>. Reject keeps consumers and parent completion blocked.',
     ],
     run: (root, options) => completeTask(root, options),
   },
@@ -66,12 +74,12 @@ const COMMANDS: readonly StatusCommandConfig[] = [
   },
   {
     action: 'reopen',
-    summary: 'Explicitly reopen a done task as in_progress',
+    summary: 'Explicitly reopen a done or rejected task as in_progress',
     verb: 'Reopened',
     usage:
       'task-graph task reopen T-NNNN [--reason <text>] [--actor <name>] [--cwd <dir>] [--json]',
     details: [
-      'Only a done task can be reopened; cancelled work is never reopened.',
+      'Only a done or reject task can be reopened; cancelled work is never reopened.',
       'The reopen is recorded in history with the actor and timestamp.',
     ],
     run: (root, options) => reopenTask(root, options),
@@ -96,7 +104,10 @@ function statusCommand(config: StatusCommandConfig): CommandSpec {
         throw usageError('A task ID is required', [`Usage: ${config.usage}`]);
       }
       if (config.action !== 'start' && (args.has('role') || args.has('session-id'))) throw usageError('--role and --session-id are supported by task start.');
-      if (config.action !== 'complete' && (args.has('report') || args.has('log'))) throw usageError('--report and --log are supported by task complete.');
+      if (!['complete', 'reject'].includes(config.action) && (args.has('report') || args.has('log') || args.has('result'))) throw usageError('--report, --log and --result are supported by task complete/reject.');
+      const result = args.opt('result');
+      if (result !== undefined && result !== 'pass' && result !== 'reject') throw usageError('--result must be pass or reject');
+      if (config.action === 'reject' && result === 'pass') throw usageError('task reject cannot use --result pass');
       const guidance = config.action === 'start' || config.action === 'reopen' ? executionGuidance() : undefined;
       const task = config.run(root, {
         id,
@@ -108,6 +119,8 @@ function statusCommand(config: StatusCommandConfig): CommandSpec {
         sessionId: args.opt('session-id'),
         reports: args.all('report'),
         log: args.opt('log'),
+        result,
+        errorReport: args.opt('error-report'),
       });
       const context = config.action === 'start' || config.action === 'reopen' ? taskContext(root, task) : undefined;
 

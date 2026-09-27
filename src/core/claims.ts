@@ -1,6 +1,14 @@
 import { TaskGraphError } from './errors.js';
 import { historyEntry, type TaskClaim, type TaskDocument } from './task.js';
 import { assertNotCancelled, mutateTaskDocument, timestampOf, type ClockOptions } from './mutate.js';
+import { loadTaskRepository } from './repo.js';
+import { computeReadiness } from './readiness.js';
+
+function assertDynamicClaim(root: string, task: TaskDocument): void {
+  if (task.planning !== 'dynamic') return;
+  const state = computeReadiness(loadTaskRepository(root)).get(task.id);
+  if (state?.readiness !== 'ready' || state.planningState !== 'refined') throw new TaskGraphError('E_TASK_BLOCKED', 'Dynamic task requires controller refinement and satisfied dependencies before claiming');
+}
 
 /** History event names recorded by the claim commands. */
 export const CLAIM_EVENTS = {
@@ -45,6 +53,7 @@ export function claimTask(root: string, options: ClaimTaskOptions): TaskDocument
 
   return mutateTaskDocument(root, options.id, (current) => {
     assertNotCancelled(current);
+    assertDynamicClaim(root, current);
     if (current.claim) {
       throw new TaskGraphError(
         'E_TASK_CLAIMED',
@@ -102,6 +111,7 @@ export function reassignClaim(root: string, options: ReassignClaimOptions): Task
 
   return mutateTaskDocument(root, options.id, (current) => {
     assertNotCancelled(current);
+    assertDynamicClaim(root, current);
     if (takeover && !current.claim) {
       throw new TaskGraphError(
         'E_NO_CLAIM',

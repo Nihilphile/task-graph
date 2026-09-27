@@ -2,7 +2,7 @@ import { TaskGraphError } from './errors.js';
 import { loadTaskRepository } from './repo.js';
 import { historyEntry, type TaskDocument, type TaskStatus } from './task.js';
 import { assertNotCancelled, mutateTaskDocument, timestampOf, type ClockOptions } from './mutate.js';
-import { appendManagedLog, saveHandoff, withDocument } from './documents.js';
+import { appendManagedLog, saveHandoff, withDocument, documentPath, readDocument, snapshotDocument } from './documents.js';
 import { computeReadiness, describeReadiness } from './readiness.js';
 
 /**
@@ -13,8 +13,9 @@ import { computeReadiness, describeReadiness } from './readiness.js';
  */
 export const STATUS_TRANSITIONS: Readonly<Record<TaskStatus, readonly TaskStatus[]>> = {
   todo: ['in_progress', 'cancelled'],
-  in_progress: ['done', 'cancelled'],
+  in_progress: ['done', 'reject', 'cancelled'],
   done: ['in_progress'],
+  reject: ['in_progress', 'cancelled'],
   cancelled: [],
 };
 
@@ -22,6 +23,9 @@ export const STATUS_TRANSITIONS: Readonly<Record<TaskStatus, readonly TaskStatus
 export const TRANSITION_EVENTS: Readonly<Record<string, string>> = {
   'todo->in_progress': 'started',
   'in_progress->done': 'completed',
+  'in_progress->reject': 'rejected',
+  'reject->in_progress': 'reopened',
+  'reject->cancelled': 'cancelled',
   'todo->cancelled': 'cancelled',
   'in_progress->cancelled': 'cancelled',
   'done->in_progress': 'reopened',
@@ -36,6 +40,8 @@ export interface TransitionOptions extends ClockOptions {
   readonly sessionId?: string;
   readonly reports?: readonly string[];
   readonly log?: string;
+  readonly result?: 'pass' | 'reject';
+  readonly errorReport?: string;
 }
 
 /**
@@ -70,21 +76,37 @@ export function transitionTask(
         ],
       );
     }
-    if (from === 'done' && to === 'in_progress' && options.reopen !== true) {
+    if ((from === 'done' || from === 'reject') && to === 'in_progress' && options.reopen !== true) {
       throw new TaskGraphError(
         'E_TASK_TRANSITION',
-        `Task "${current.id}" is done; reopening is explicit`,
+        `Task "${current.id}" is ${from}; reopening is explicit`,
         ['Pass --reopen (or use `task-graph task reopen`) to move it back to in_progress.'],
       );
     }
     if (to === 'done' && current.subgraph) {
       assertCompletionComplete(root, current);
     }
+    if ((to === 'done' || to === 'reject') && current.kind === 'acceptance' && (!(options.reports?.length) || !options.result)) {
+      throw new TaskGraphError('E_ACCEPTANCE_RESULT', 'Acceptance completion requires --result pass|reject and --report <evidence file>');
+    }
+
+    if (to !== 'reject' && options.errorReport !== undefined) throw new TaskGraphError('E_ERROR_REPORT', '--error-report is only supported for reject results');
+    let errorDetails = {};
+    if (to === 'reject') {
+      if (!options.errorReport?.trim()) throw new TaskGraphError('E_ERROR_REPORT', 'Reject requires --error-report <Markdown file>: briefly describe the failure, failure mode, and cause or improvement.');
+      const file = documentPath(options.errorReport);
+      const bytes = readDocument(root, file);
+      if (!/\.(md|markdown)$/i.test(file) || !bytes.toString('utf8').trim()) throw new TaskGraphError('E_ERROR_REPORT', '--error-report must be a non-empty Markdown file');
+      const saved = snapshotDocument(transaction, file, bytes);
+      errorDetails = { error_report: file, error_snapshot: saved.snapshot, error_sha256: saved.sha256,
+        error_reviewer_role: current.claim?.role ?? null, error_reviewer_session: current.claim?.sessionId ?? null };
+    }
 
     let next = current;
     if (to === 'in_progress') {
       const readiness = computeReadiness(loadTaskRepository(root)).get(current.id)!;
       if (readiness.readiness === 'blocked') throw new TaskGraphError('E_TASK_BLOCKED', `Task "${current.id}" is ${describeReadiness(readiness)}`);
+      if (current.planning === 'dynamic' && readiness.planningState !== 'refined') throw new TaskGraphError('E_TASK_BLOCKED', 'Dynamic work requires current controller refinement before reopening');
       if (options.role !== undefined || options.sessionId !== undefined) {
         if (!options.role?.trim() || !options.sessionId?.trim()) throw new TaskGraphError('E_TASK_CLAIM', 'Starting with a claim requires --role and --session-id');
         if (current.claim && (current.claim.role !== options.role || current.claim.sessionId !== options.sessionId)) throw new TaskGraphError('E_TASK_CLAIMED', `Task "${current.id}" is already claimed`, ['Use task reassign for an explicit takeover.']);
@@ -93,12 +115,18 @@ export function transitionTask(
       }
       next = saveHandoff(root, { ...next, status: to }, transaction, { ...options, title: `派工 · ${at}` });
     }
-    if (to === 'done') {
-      for (const report of options.reports ?? []) next = withDocument(root, next, transaction, { ...options, path: report, kind: 'report' });
+    if (to === 'done' || to === 'reject') {
+      const evidence: string[] = [];
+      for (const report of options.reports ?? []) {
+        next = withDocument(root, next, transaction, { ...options, path: report, kind: 'report' });
+        const output = [...next.outputs].reverse().find(o => o.kind === 'report' && o.path === documentPath(report));
+        if (output?.snapshot) evidence.push(output.snapshot);
+      }
+      if (to === 'reject') errorDetails = { ...errorDetails, error_evidence: evidence };
       if (options.log !== undefined) next = appendManagedLog(root, next, transaction, options.log, options);
       if (next.claim) {
         next = { ...next, claim: null, history: [...next.history,
-          historyEntry('released', at, options.actor ?? null, { role: next.claim.role, session_id: next.claim.sessionId, reason: 'task completed' }),
+          historyEntry('released', at, options.actor ?? null, { role: next.claim.role, session_id: next.claim.sessionId, reason: to === 'reject' ? 'task rejected' : 'task completed' }),
         ] };
       }
     }
@@ -112,7 +140,9 @@ export function transitionTask(
         historyEntry(event, at, options.actor ?? null, {
           from,
           to,
+          ...((to === 'done' && options.result) || to === 'reject' ? { result: to === 'done' ? 'pass' : 'reject' } : {}),
           ...(options.reason === undefined ? {} : { reason: options.reason }),
+          ...errorDetails,
         }),
       ],
     };
@@ -126,7 +156,11 @@ export function startTask(root: string, options: TransitionOptions): TaskDocumen
 
 /** `in_progress` -> `done`. */
 export function completeTask(root: string, options: TransitionOptions): TaskDocument {
-  return transitionTask(root, 'done', options);
+  return transitionTask(root, options.result === 'reject' ? 'reject' : 'done', options);
+}
+
+export function rejectTask(root: string, options: TransitionOptions): TaskDocument {
+  return transitionTask(root, 'reject', { ...options, result: 'reject' });
 }
 
 /** `todo` or `in_progress` -> `cancelled` (terminal). */

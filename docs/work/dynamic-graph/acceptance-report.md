@@ -1,0 +1,63 @@
+# T-0013 独立验收报告
+
+时间：2026-09-27 18:12—18:15 初验，18:17 补充消费证据并收口（Asia/Shanghai）。验收者：`/root/dynamic_skill_eval`，角色 independent-verifier。项目：`D:/文档/ChatGPT/画板/task-graph`。依据：`docs/work/dynamic-graph/acceptance.md`；已通过公开 CLI start 并记录接手日志，领取身份经 task show 核实。
+
+## 当前结论
+
+代码行为、兼容回归、隔离动态工作流及独立技能试用达到已检查的验收条件。初验唯一缺口是当前 Desktop 根会话后续轮实际消费；主控现已直接观察到原 probe 通知并继续处理，本验收者核对新版观察快照、原事件账本、任务状态与报告路径一致。因此 T-0013 总验收结论为 **PASS**，按本报告声明的验证范围收口。
+
+已解除阻塞项：`等待当前 Desktop 会话下一轮实际收到 probe 事件`。旧版仅 accepted 的验收报告快照保留。
+
+## 逐条结果
+
+| 验收条件 | 结论 | 直接证据与范围 |
+| --- | --- | --- |
+| 单/多 content 兼容，全部要求清单 | 通过 | 本验收者先前隔离 CLI 实操读取单项 A、多项 B/V 的 context.contents，旧 content 首项仍可用。审阅 src/core/task-context.ts，保留首项 title/summary；完整回归旧地址清单测试通过。 |
+| HTML 多文件列表与打开正文 | 通过（DOM 自动验证） | tests/multi-content.test.ts 用生成 HTML 实际点击 content 标签，断言三项 document-item，再点击文档检查 document-content；最新 targeted 日志中该用例通过。不是截图视觉检查。 |
+| 依赖完成仍需主控 refine | 通过 | skill-eval.md 记录 A 完成后 B 为 awaiting_review，start 被 E_TASK_BLOCKED 拒绝；refine 后才可开始。dynamic-planning 回归同时验证 claim 无法绕过。 |
+| 新增依赖、内容或前置参考变化须重新评估 | 通过 | 隔离实操新增 C，C 未完成时 refine B 被拒绝；refine 后改 content 得 stale，start 拒绝。targeted 用例另覆盖前置 live reference 改动、已 done 动态任务返工以及 replacement 保留动态模式。 |
+| 执行中不能静默改动态要求 | 通过 | assertPlanMutable 检查 content、依赖、标题和正文；dynamic-planning 回归验证执行中 remove content 拒绝。直接外部编辑文件不能加锁，文档已声明。 |
+| reject 不释放后继、父任务不能完成 | 通过 | 已阅读 tests/dynamic-planning.test.ts 的独立结果测试：父已 start，V reject 后后继 start 和父 complete 都失败；targeted 日志记录通过。此证据补足早先技能演练中父仍 todo 导致负例先被状态门槛拒绝的局限。 |
+| 显式复验 pass、释放 claim、保留旧报告 | 通过 | 独立 CLI 演练 V reject 后 claim=null，新增 F、F 完成、refine/reopen/claim 后重跑原断言，pass 成功；show 同时保留失败和通过的两个快照。原生证据与代码哈希见 skill-eval.md 及其临时目录。 |
+| watch 显式注册、幂等、子图、不回补、取消 | 通过（fixture） | graph-watch.test.ts 通过注入 adapter 检查未订阅无账本、缺 thread 拒绝、重复 ID 相同、子图结果生成事件、旧结果不扫描、unwatch 取消未发送事件。targeted 日志通过。 |
+| 持久队列恢复与不确定状态 | 通过（fixture/源码） | 活 owner 阻止重复处理；中断 in_flight 转 uncertain；uncertain 无盲目重试；--allow-duplicate 显式恢复；可证明未启动最多四次后 paused。实现与针对性测试一致。 |
+| 半写结果不误发 | 通过（fixture） | 最新测试模拟账本存在但任务完成历史缺失，deliverWatch 不 submit，事件 paused。源码按 task ID、历史索引及历史项重新计算结果事件哈希。普通异常事务可回滚，不宣称跨文件断电原子性。 |
+| Desktop 参数、严格回执与版本门槛 | 通过（进程 fixture） | 中文、多行、引号、美元符号通过参数数组原样传递；shell=false/windowsHide=true；仅 exit=0、目标匹配且未 uncertain 的完整回执算 accepted；超时、输出过量、回执不匹配不能算接受；版本检查失败 paused。 |
+| 注册绑定刷新与本地忽略 | 通过（本验收者补充验证） | 最新构建的隔离 adapter fixture 验证同 profile 更新 executable/version、保持 subscription ID、零回补；不同 profile 返回 E_WATCH_PROFILE 且账本字节不变；.task-graph/.gitignore 含 /watch.json；submit 调用数 0。 |
+| 当前 Desktop 有界真实 queue | 通过（回执层） | 本验收者只读 graph watch --status 再核对：版本 0.158.0-alpha.2.1，accepted=1，attempts=1，其他计数均 0，严格 receipt 有值；subscription 已停止，未补发。 |
+| 当前 Desktop 根会话下一轮消费 | 通过（根会话直接观察，本验收者核对证据） | 主控在前一 turn 结束后于新一轮实际收到同一 probe 事件，首个时钟观察为 2026-09-27T18:16:14.2332303+08:00，随后查询任务并读报告。本验收者读新版 T10 报告快照并交叉核对 event、project、task、result、read_path 一致。工具 consumption 仍为 unconfirmed，未伪造产品 ACK。 |
+| 空白上下文技能可用性与静态分工 | 通过 | 独立演练已完整走通，详见 skill-eval.md。现版 to-active-task 增加统筹父任务 refine/start、同入口重试说明；to-task description 已声明一次性详细规划，task-take 继续负责执行与验收交付；三者分工一致。 |
+| 静态工作流兼容 | 通过 | dynamic-static-workflow.log：5/5、0 fail、0 skipped；覆盖示例落图、同 key 恢复、子图 gate、失败原子回滚和离线 GitHub 模拟。未调用真实 GitHub。 |
+
+## 执行与证据来源
+
+亲自执行：第一阶段在隔离目录的完整 CLI 生命周期与真实 Node 断言；本阶段正式 start/show/log；隔离绑定刷新 fixture；真实 smoke 图只读 status。没有重新发送真实通知，没有重新运行全套测试，没有修改工具实现源码。
+
+读取并核对：最终源代码与技能、完整验收要求、六项 reference、既有快照报告、以下原始日志。实现汇总 implementation-report.md 仅作索引，不单独作为通过依据。
+
+- `output/dynamic-final-tests.log`：243/243，fail=0、skipped=0，duration 294003.6745 ms。该全套发生在最后一批 watch 修订之前。
+- `output/dynamic-targeted-tests.log`：最新构建针对 dynamic-planning、graph-watch、multi-content、reference-context 等 17/17，fail=0、skipped=0，duration 19833.5421 ms；覆盖最后新增的半写历史核验。
+- `output/dynamic-static-workflow.log`：5/5，fail=0、skipped=0，duration 22748.2856 ms。
+- `docs/work/dynamic-graph/skill-eval.md`：独立行为试用，含首轮批量 planning 白名单缺陷、修复后重试结果和完整临时证据路径。
+- `docs/work/dynamic-graph/desktop-smoke.md` 及前置快照：主控的有界实机观察；由本验收者只读 status 交叉核对回执层状态。
+- 本阶段额外 fixture：`C:/Users/Dreamjiao/AppData/Local/Temp/task-graph-skill-eval-e39dd206804242328378f43ff39340d8/binding-eval.mjs`；生成隔离项目 `C:/Users/DREAMJ~1/AppData/Local/Temp/task-watch-bind-eval-oCmnO5`，六项断言全部通过，零实际发送。
+
+审阅时构建/文档 SHA256：
+
+- dist/src/core/watch.js：71019B855D73DD395094AEBEA8C3C2EDF537C19D9ADC5CF1BAD5260A9F1B6A56
+- skills/to-active-task/SKILL.md：B87A2A4E6E5DCA0CDAD4FEA5159368B407EF686A594BCB5A5F77F567B732A4BB
+- skills/task-take/SKILL.md：2C09831D8E6D3805974E2770E41DF6C7FD7532CDCF1DA7BC7B4D149C30EACF98
+- output/dynamic-final-tests.log：21E26B76501CCE8761162C85C4B5177F212D6D99D83AE8D4F89BAF12670AE7DD
+
+## 消费缺口解除证据
+
+目标根会话：`01a0d067-d9fc-7cd1-b278-4b068b7a7169`。
+
+唯一已发送 probe 事件：`1811baf714ba657ac75a40091d408a03fa42b7f922d0d3398301c4720ecaee0e`；严格 queue receipt：`01a0e253-edac-7191-a2c5-e35b2c95ca50`。
+
+根会话在前一 turn 结束后直接收到新的 Task Graph notification；其开始处理后首个本机时钟观察为 2026-09-27T18:16:14.2332303+08:00。此时间是主控观察时间，不是精确送达时间。主控已查询隔离项目的 T-0001 并阅读报告快照。本验收者没有亲自在根会话观察通知，而是审阅主控的新报告快照 `.task-graph/snapshots/2a24134a4342e33461d0de12060aa4e1c41a2d30393f8c8089fb4dcb04f64c78.md`，并用公开 CLI 再次核对原账本及 task show：event 与上述唯一事件相同，project 为 output/desktop-watch-smoke，graph=G-001、task=T-0001、status=done、result=pass；报告 read_path 为 `.task-graph/snapshots/109a1b51a467ea08fd13ae68a2c2a4aa6dd1567623bbc97cb1b28c13330b70f3.md`，本验收者已读取其正文。账本仍为 accepted、attempts=1，订阅 inactive，未发生补发。所有核对项一致，原 blocker 的解除条件已满足。
+
+本次通过证明当前 Desktop 0.158.0-alpha.2.1 下，这个已加载的忙碌根会话能在结束 turn 后消费该结果通知并续接工作。consumption=unconfirmed 是产品缺少消费 ACK 协议的固定能力边界，与新增的人工观察证据分开记录，不手工修改该字段。本轮未重跑测试、未重发通知，原 243/243、17/17、5/5 证据仍沿用。
+
+历史 0.153.4 的 idle/busy 证据不转移为当前版本的消费保证。App 退出、未加载会话、切页、跨机器、进程中断恢复、模型消费 ACK、exactly-once 与当前轮注入均未在本轮获得保证。refine 是可审计判断与输入变化检测，不是强身份认证或语义完整性证明。
+

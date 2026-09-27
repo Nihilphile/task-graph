@@ -1,4 +1,5 @@
 import type { ParsedArgs } from './args.js';
+import type { DesktopAdapter } from '../core/desktop-notify.js';
 
 export interface CliIo {
   out(text: string): void;
@@ -6,6 +7,9 @@ export interface CliIo {
 }
 
 export interface CliContext {
+  /** A resource-addressed task collection fixes placement, including batch inputs. */
+  readonly scopedGraph?: string;
+  readonly desktopAdapter?: DesktopAdapter;
   /** Directory the command runs against; `--cwd` overrides the process cwd. */
   readonly cwd: string;
   readonly io: CliIo;
