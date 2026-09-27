@@ -51,7 +51,8 @@ export function parseResource(address: string): ResourceAddress {
   }
   if (tail) {
     if (type === 'graph-item' && tail === '.watch') type = 'watch';
-    else if (task && /^\.(content|report|reference|log|handoff|output|dependency|subgraph)$/.test(tail)) type = tail.slice(1);
+    else if (type === 'graph-item' && tail === '.auto-review') type = 'graph-auto-review';
+    else if (task && /^\.(content|review-requirement|review|auto-review|report|reference|log|handoff|output|dependency|subgraph)$/.test(tail)) type = tail.slice(1);
     else return invalid();
   }
   const canonical = graph === undefined ? address : graphAddress(graph) + address.slice(address.indexOf(']') + 1);
@@ -63,7 +64,7 @@ interface Route { action: string; command?: CommandSpec; fixed?: string[]; summa
 // Kept separate from legacy parsing so old scripts retain their accepted syntax.
 // `status` is a value on task lists and a switch on graph watch.
 function validateOptionValues(raw: readonly string[], route: Route): void {
-  const booleans = new Set(['all', 'available', 'flush', 'allow-duplicate', 'needs-refinement', 'handoff', 'manifest',
+  const booleans = new Set(['recursive', 'all', 'available', 'flush', 'allow-duplicate', 'needs-refinement', 'handoff', 'manifest',
     'preview', 'snapshot', 'gh', 'dry-run', 'entry', 'force', 'help', 'json', 'offline', 'quiet', 'reopen', 'replace', 'strict', 'takeover', 'verbose']);
   if (route.command?.name === 'graph watch') booleans.add('status');
   for (let i = 0; i < raw.length; i++) {
@@ -107,6 +108,13 @@ function routes(resource: ResourceAddress, commands: readonly CommandSpec[]): Ro
         if (words.length === 2 && words[0] === 'task' && !['add', 'list', 'log'].includes(words[1]!)) add(words[1]!, command.name);
       }
       break;
+    case 'graph-auto-review':
+      for (const action of ['enable', 'status']) add(action, `graph auto-review ${action}`);
+      break;
+    case 'review':
+    case 'auto-review':
+      for (const command of commands) { const prefix = `task ${resource.type} `; if (command.name.startsWith(prefix)) add(command.name.slice(prefix.length), command.name); }
+      break;
     case 'watch':
       add('add', 'graph watch'); add('remove', 'graph unwatch');
       add('status', 'graph watch', ['--status']); add('flush', 'graph watch', ['--flush']);
@@ -133,10 +141,10 @@ function routes(resource: ResourceAddress, commands: readonly CommandSpec[]): Ro
 function children(resource: ResourceAddress): string[] {
   if (resource.type === '.') return ['graph', 'task', 'source', 'github', 'skill'];
   if (resource.type === 'graph') return ['graph[G-NNN]'];
-  if (resource.type === 'graph-item') return [`${resource.address}.task`, `${resource.address}.watch`];
+  if (resource.type === 'graph-item') return [`${resource.address}.task`, `${resource.address}.watch`, `${resource.address}.auto-review`];
   if (resource.type === 'task') return [resource.address !== 'task' ? `${resource.address}[T-NNNN]` : 'graph[G-NNN].task[T-NNNN]'];
   if (resource.type === 'subgraph') return [`${resource.address}.task`];
-  if (resource.type === 'task-item') return ['content', 'reference', 'report', 'log', 'handoff', 'output', 'dependency', 'subgraph'].map(k => `${resource.address}.${k}`);
+  if (resource.type === 'task-item') return ['content', 'review-requirement', 'auto-review', 'review', 'reference', 'report', 'log', 'handoff', 'output', 'dependency', 'subgraph'].map(k => `${resource.address}.${k}`);
   return [];
 }
 
@@ -204,7 +212,7 @@ function resourceUsage(resource: ResourceAddress, route: Route): string {
   }
   let suffix = route.command!.usage.slice(`task-graph ${route.command!.name}`.length);
   if (resource.task) suffix = suffix.replace(/^ T-NNNN/, '');
-  else if (resource.type === 'graph-item' || resource.type === 'watch') suffix = suffix.replace(/^ G-NNN/, '');
+  else if (resource.type === 'graph-item' || resource.type === 'watch' || resource.type === 'graph-auto-review') suffix = suffix.replace(/^ G-NNN/, '');
   if (resource.type === 'task' && resource.graph) suffix = suffix.replace(' [--graph G-NNN | --parent-task T-NNNN]', '').replace(' [--graph G-NNN]', '');
   return `task-graph '${resource.address}' ${route.action}${suffix}`;
 }
@@ -225,7 +233,7 @@ function query(resource: ResourceAddress, repository: TaskRepository, root: stri
   }) };
   if (resource.type === 'subgraph') return { resource: address, subgraph: task.subgraph ? { ...task.subgraph, resource: graphAddress(task.subgraph.graph) } : null };
   const context = taskContext(root, task, repository);
-  const groups: Record<string, typeof context.contents> = { content: context.contents, reference: context.references, report: context.reports,
+  const groups: Record<string, typeof context.contents> = { content: context.contents, 'review-requirement': context.review_requirements, reference: context.references, report: context.reports,
     log: context.logs, handoff: context.handoffs, output: context.outputs };
   const files = groups[resource.type]!;
   return { resource: address, project_root: context.project_root, files: files.map(file => {
@@ -308,7 +316,7 @@ export function prepareResource(argv: readonly string[], ctx: CliContext, comman
     }
     return target.task! + (gate.length ? `:${gate[0]}` : '');
   }));
-  const target = resource.task ?? (['graph-item', 'watch'].includes(resource.type) ? resource.graph : undefined);
+  const target = resource.task ?? (['graph-item', 'watch', 'graph-auto-review'].includes(resource.type) ? resource.graph : undefined);
   const translated = [...route.command.name.split(' '), ...(target ? [target] : []), ...(route.fixed ?? []),
     ...[...options].flatMap(([key, values]) => values.map(value => `--${key}=${value}`))];
   return { argv: translated, resource, ...(resource.type === 'task' && resource.graph ? { scopedGraph: resource.graph } : {}) };

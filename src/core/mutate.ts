@@ -43,6 +43,9 @@ export function mutateTaskDocument(
       }
       const next = mutate(current, transaction);
       assertPlanMutable(current, next);
+      const rr = (t: TaskDocument) => t.outputs.filter(o => o.kind === 'review-requirement');
+      if (current.status === 'pending_review' && (JSON.stringify(rr(current)) !== JSON.stringify(rr(next)) || current.content !== next.content || current.body !== next.body || JSON.stringify(current.outputs.filter(o => o.kind === 'content')) !== JSON.stringify(next.outputs.filter(o => o.kind === 'content')))) throw new TaskGraphError('E_REVIEW_ACTIVE', 'Requirements are fixed during review');
+      if (next.history.length !== current.history.length && ['review_failed', 'review_warning', 'review_blocked'].includes(next.history.at(-1)!.event)) recordWatchResult(root, next, transaction, next.history.at(-1)!.event === 'review_blocked' ? 'blocked' : 'warning');
       if (current.status !== next.status && (next.status === 'done' || next.status === 'reject')) recordWatchResult(root, next, transaction);
       transaction.write(
         `.task-graph/tasks/${current.id}.md`,
@@ -62,6 +65,7 @@ export function mutateTaskDocument(
 
 /** Rejects work that is not allowed while a task is cancelled (terminal). */
 export function assertNotCancelled(task: TaskDocument): void {
+  if (task.status === 'pending_review') throw new TaskGraphError('E_REVIEW_ACTIVE', 'Task is awaiting review; use task[].review operations');
   if (task.status !== 'cancelled') return;
   throw new TaskGraphError('E_TASK_TRANSITION', `Task "${task.id}" is cancelled`, [
     'Cancelled is terminal: create a new task or revise the goal instead.',

@@ -58,6 +58,12 @@ export class ProjectTransaction {
     return this.writes.size === 0 && this.deletions.size === 0;
   }
 
+  /** Read a staged write before commit, for atomically freezing newly attached reports. */
+  readStaged(target: string): Buffer | undefined {
+    const value = this.writes.get(this.resolve(target));
+    return value === undefined ? undefined : Buffer.isBuffer(value) ? value : Buffer.from(value);
+  }
+
   /**
    * Applies the staged changes, validating before writing and again before the
    * transaction is accepted. Any failure restores every touched file.

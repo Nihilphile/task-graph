@@ -292,3 +292,8 @@ CLI 'task[T-0012].output' set-audience --path doc/reports/tool-feedback.md --aud
 旧任务的 --title 与内嵌正文继续有效。未绑定 content 的任务在侧栏显示自身正文；已有“## 工作记录”章节继续接收 `'task[T-0012].log' add` 追加，并出现在工作记录分类。只有在需要统一要求来源时才绑定外部 content，无需为使用新版批量迁移旧任务。
 
 旧版普通产物不自动推断为 report。要将已有文件登记为报告，使用 report attach 明确绑定；原普通产物记录是否保留由主控按实际需求决定。
+
+
+## 独立审查
+
+新增 `.review-requirement` 多文件标签与 task/graph 的 `.auto-review`，手动启动使用 `task[ID].review start`。自动提交和手动审查都进入 pending_review，由 review finish 保存本轮报告及 pass/reject/blocked 结论。配置、现场验证、restart 和订阅语义见 [独立审查](review.md)。

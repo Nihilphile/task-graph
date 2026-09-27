@@ -27,6 +27,7 @@ export interface TaskContext {
   readonly project_root: string;
   readonly content: ContextFile;
   readonly contents: readonly ContextFile[];
+  readonly review_requirements: readonly ContextFile[];
   readonly references: readonly ContextReference[];
   readonly handoffs: readonly ContextFile[];
   readonly reports: readonly ContextFile[];
@@ -76,7 +77,7 @@ export function taskContext(root: string, task: TaskDocument, repository = loadT
   for (const binding of attachmentBindings(task, repository)) {
     const o = binding.output;
     if (o.kind === 'content') continue;
-    if (binding.scope === 'dependency' && (o.kind === 'log' || o.kind === 'handoff')) continue;
+    if (binding.scope === 'dependency' && (o.kind === 'log' || o.kind === 'handoff' || o.kind === 'review-requirement')) continue;
     // Old generated handoffs can contain copies of unrelated attachments; require review before reuse.
     const reason = o.audience === 'user' ? 'audience_user' : pathExcluded(o) ? 'excluded_path'
       : o.kind === 'handoff' && o.path === o.snapshot && !o.handoffFormat && o.audience !== 'agent' ? 'legacy_aggregate' : undefined;
@@ -98,7 +99,7 @@ export function taskContext(root: string, task: TaskDocument, repository = loadT
   }
   return {
     project_root: path.resolve(root),
-    content, contents,
+    content, contents, review_requirements: entries.filter(o => o.kind === 'review-requirement'),
     references: entries.filter(o => o.kind === 'reference'),
     handoffs: entries.filter(o => o.kind === 'handoff'),
     reports: entries.filter(o => o.kind === 'report'),
@@ -107,7 +108,7 @@ export function taskContext(root: string, task: TaskDocument, repository = loadT
 }
 
 export function contextFiles(context: TaskContext): readonly ContextFile[] {
-  return [...context.contents, ...context.references, ...context.reports, ...context.logs, ...context.handoffs, ...context.outputs].filter(o => !o.excluded);
+  return [...context.contents, ...context.review_requirements, ...context.references, ...context.reports, ...context.logs, ...context.handoffs, ...context.outputs].filter(o => !o.excluded);
 }
 
 export function referenceDocuments(root: string, task: TaskDocument, repository = loadTaskRepository(root)): DocumentView[] {
@@ -125,7 +126,7 @@ export function formatTaskContext(context: TaskContext, options: { portable?: bo
   for (const entry of context.references) {
     lines.push(`- ${entry.scope === 'self' ? '本任务' : '依赖'} ${entry.source_task} · ${entry.title}：${entry.read_path} (${entry.mode})${entry.summary ? '\n  ' + entry.summary : ''}${entry.error ? '\n  错误：' + entry.error : ''}`);
   }
-  for (const [kind, files] of [['交接', context.handoffs], ['报告', context.reports], ['记录', context.logs], ['产物', context.outputs]] as const) {
+  for (const [kind, files] of [['验收要求', context.review_requirements], ['交接', context.handoffs], ['报告', context.reports], ['记录', context.logs], ['产物', context.outputs]] as const) {
     for (const file of files) lines.push(`- ${kind} · ${file.source_task} · ${file.title}：${file.read_path} (${file.mode})${file.summary ? '\n  ' + file.summary : ''}${file.error ? '\n  错误：' + file.error : ''}`);
   }
   if (context.content.excluded) lines.push(`要求已排除：${context.content.excluded}`);

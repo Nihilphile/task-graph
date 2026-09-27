@@ -16,7 +16,7 @@ description: >-
 
 ## 资源地址与命令发现
 
-优先使用 `CLI 'graph[G-001].task[T-0012]' <动作>`；只知道任务 ID 时可用 `task[T-0012]`。任务材料集合包括 `.content`、`.reference`、`.report`、`.log`、`.handoff`、`.output`，依赖集合为 `.dependency`。子图任务可沿 `.subgraph.task[T-0002]` 寻址。地址中的归属会被校验；ID 使用实际返回值。
+优先使用 `CLI 'graph[G-001].task[T-0012]' <动作>`；只知道任务 ID 时可用 `task[T-0012]`。任务材料集合包括 `.content`、`.review-requirement`、`.review`、`.auto-review`、`.reference`、`.report`、`.log`、`.handoff`、`.output`，依赖集合为 `.dependency`。子图任务可沿 `.subgraph.task[T-0002]` 寻址。地址中的归属会被校验；ID 使用实际返回值。
 
 用 `CLI . describe` 发现入口，`CLI graph list` 找到图，`CLI '<资源地址>' describe` 查看操作和条件。所有调用带项目 `--cwd`；结构化输出加 `--json`。CLI 是 `node "<工具目录>/dist/src/cli.js"` 的缩写。
 
@@ -29,12 +29,12 @@ description: >-
 - **任务（task）**：一项可交付工作，自动分配 ID，例如 `T-0001`。摘要显示在节点上，完整要求放在你编写的 Markdown 文件中。
 - **图（graph）**：一组任务及它们的关系，自动分配 ID，例如 `G-001`。入口图是浏览起点；某个任务下面的细分工作放在子图中，该任务称为复合任务。
 - **依赖（depends_on）**：例如 B 依赖 A，表示 A 完成后 B 才能开始。一个任务可依赖多个前置任务，所有依赖都满足才就绪。工具拒绝循环依赖。
-- **状态与就绪**：`status` 是已记录的 todo（待开始）、in_progress（执行中）、done（通过/完成）、reject（未通过）、cancelled（取消）；`readiness` 综合依赖、人工阻塞和动态任务的细化门槛计算 ready 或 blocked。ready 本身不表示任务待执行。
+- **状态与就绪**：`status` 是已记录的 todo（待开始）、in_progress（执行中）、pending_review（待审查）、done（通过/完成）、reject（未通过）、cancelled（取消）；`readiness` 综合依赖、人工阻塞和动态任务的细化门槛计算 ready 或 blocked。ready 本身不表示任务待执行。
 - **领取（claim）**：记录由哪个角色、哪个实际 Agent 会话负责。领取本身不启动 Agent。
 - **交接（handoff）**：默认提供任务事实及文件索引，按需显式展开正文；保存快照时冻结当前要求并保留附件索引。
 - **参考（reference）**：任务提供给后继 Agent 的代码索引或接入说明。文件由产出任务登记，后继沿直接依赖读取；与同一任务接续执行的 handoff 分开。
 
-Task Graph 不负责启动或停止 Agent、检测会话失败、自动释放领取、重试或重新调度。主控使用所在环境的调度工具完成派工，并在本工具记录责任人和结果。
+Task Graph 的普通施工由主控通过所在环境派工。启用自动审查或手动启动 review 后，工具通过 codex exec 启动独立审查者、记录运行与异常，并通过已有订阅返回结果；审查用法见 [独立审查](references/review.md)。
 
 ## 1. 找到入口与目标项目
 
@@ -157,7 +157,9 @@ CLI 'task[T-0001].reference' attach --path doc/references/implementation.md --su
 
 reference 默认读取当前文件，用 `--snapshot` 保留固定交付版本。report/log/handoff/reference 的 attach 均支持可选 `--summary` 和 `--title`；未填 title 时用文件名。summary 介绍附件，与任务节点的 summary 分开。报告、交接默认快照，日志保持 live；生成交接的 `'task[T-0001].handoff' create` 也支持摘要。
 
-执行者写好报告，主控或执行者按已约定的验收责任确认完成条件后：
+已启用 auto-review 的任务在开工前绑定独立 RR；执行者读取 context.review_requirements。complete 会提交为 pending_review，并自动启动审查，不提前放行完整依赖。手动审查由主控读完已完成任务的报告、确定 RR 后调用 `.review start`。多文件 RR、模型配置、异常 restart 和通知规则见 [独立审查](references/review.md)。
+
+执行者写好报告，主控或执行者按已约定的验收责任提交后：
 
 ```text
 CLI 'task[T-0001]' complete --report doc/reports/implementation.md --log "验证通过，报告已提交" --cwd "<项目根目录>" --json

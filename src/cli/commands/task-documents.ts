@@ -5,7 +5,7 @@ import { resolveCwd } from '../paths.js';
 
 export function taskDocumentCommands(): readonly CommandSpec[] {
   return [
-    ...(['content', 'report', 'log', 'handoff', 'reference'] as const).map((kind): CommandSpec => ({
+    ...(['content', 'review-requirement', 'report', 'log', 'handoff', 'reference'] as const).map((kind): CommandSpec => ({
       name: `task ${kind} attach`,
       summary: `Attach a ${kind} file for offline reading from a task label`,
       usage: `task-graph task ${kind} attach T-NNNN --path <file> [--title <text>] [--summary <text>] [--audience agent|user]${kind === 'reference' ? ' [--snapshot]' : ''} [--actor <name>] [--cwd <dir>] [--json]`,

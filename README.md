@@ -82,3 +82,8 @@ node dist/src/cli.js skill validate --json
 ```
 
 测试使用隔离的临时项目；GitHub 同步测试使用模拟接口，不向真实仓库发布 issue。工具记录 Agent 的领取与状态，Agent 的启动和调度由主控所在环境负责。
+
+
+## 独立审查
+
+新增 `.review-requirement` 多文件标签与 task/graph 的 `.auto-review`，手动启动使用 `task[ID].review start`。自动提交和手动审查都进入 pending_review，由 review finish 保存本轮报告及 pass/reject/blocked 结论。配置、现场验证、restart 和订阅语义见 [独立审查](references/review.md)。

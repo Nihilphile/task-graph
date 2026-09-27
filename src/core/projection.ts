@@ -1,3 +1,4 @@
+import { reviewView } from './review-state.js';
 import path from 'node:path';
 import { projectPaths } from './layout.js';
 import { renderMarkdown } from './markdown.js';
@@ -31,6 +32,7 @@ export interface ProjectedTask {
   readonly history?: readonly TaskHistoryEntry[];
   readonly status: string;
   readonly planningState?: string;
+  readonly review?: ReturnType<typeof reviewView>;
   readonly kind?: string;
   readonly claim: TaskClaim | null;
   readonly dependsOn: readonly TaskDependency[];
@@ -124,6 +126,7 @@ export function createGraphProjection(root: string): GraphProjection {
     ...remoteView(task.graph, task.id),
     documents: { ...taskDocuments(root, task), references: referenceDocuments(root, task, repository) },
     history: task.history,
+    review: reviewView(root, task.id),
     status: task.status,
     planningState: readiness.get(task.id)?.planningState ?? 'static',
     kind: task.kind ?? 'work',

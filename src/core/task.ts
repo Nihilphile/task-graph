@@ -5,7 +5,7 @@ import { projectPaths, taskFileName, relativePath } from './layout.js';
 import { isTimestamp } from './time.js';
 import { isPlainObject, parseYamlDocument, stringifyYamlDocument } from './yaml-io.js';
 
-export const TASK_STATUSES = ['todo', 'in_progress', 'done', 'reject', 'cancelled'] as const;
+export const TASK_STATUSES = ['todo', 'in_progress', 'pending_review', 'done', 'reject', 'cancelled'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 export const TASK_ID_PATTERN = /^T-\d{4,}$/;
@@ -67,7 +67,7 @@ export interface TaskSubgraph {
 export interface TaskOutput {
   readonly path: string;
   readonly note?: string;
-  readonly kind?: 'content' | 'report' | 'log' | 'handoff' | 'reference';
+  readonly kind?: 'content' | 'review-requirement' | 'report' | 'log' | 'handoff' | 'reference';
   readonly summary?: string;
   readonly audience?: 'agent' | 'user';
   readonly handoffFormat?: 'indexed-v1';
@@ -331,7 +331,7 @@ function readOutputs(value: unknown, source: string): TaskOutput[] {
         const text = readOptionalString(entry[disk], source, `outputs[${index}].${disk}`);
         if (text !== undefined) result[field] = text;
       }
-      if (result['kind'] !== undefined && !['content', 'report', 'log', 'handoff', 'reference'].includes(result['kind'])) {
+      if (result['kind'] !== undefined && !['content', 'review-requirement', 'report', 'log', 'handoff', 'reference'].includes(result['kind'])) {
         throw new TaskGraphError('E_TASK_FORMAT', `${source}: unsupported output kind "${result['kind']}"`);
       }
       if (result['audience'] !== undefined && !['agent', 'user'].includes(result['audience'])) throw new TaskGraphError('E_TASK_FORMAT', `${source}: unsupported output audience`);

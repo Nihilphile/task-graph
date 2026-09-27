@@ -1,3 +1,5 @@
+import { startReview, requireReviewRequirements } from './review.js';
+import { readReviewState } from './review-state.js';
 import { TaskGraphError } from './errors.js';
 import { loadTaskRepository } from './repo.js';
 import { historyEntry, type TaskDocument, type TaskStatus } from './task.js';
@@ -14,6 +16,7 @@ import { computeReadiness, describeReadiness } from './readiness.js';
 export const STATUS_TRANSITIONS: Readonly<Record<TaskStatus, readonly TaskStatus[]>> = {
   todo: ['in_progress', 'cancelled'],
   in_progress: ['done', 'reject', 'cancelled'],
+  pending_review: [],
   done: ['in_progress'],
   reject: ['in_progress', 'cancelled'],
   cancelled: [],
@@ -55,6 +58,9 @@ export function transitionTask(
   const at = timestampOf(options.now);
   return mutateTaskDocument(root, options.id, (current, transaction) => {
     const from = current.status;
+    const auto = readReviewState(root).tasks[current.id]?.enabled;
+    if (auto && ['done', 'reject'].includes(to)) throw new TaskGraphError('E_REVIEW_REQUIRED', 'Use complete to submit to auto-review; only review finish may record its verdict');
+    if (auto && to === 'in_progress') requireReviewRequirements(root, current);
     assertNotCancelled(current);
     if (from === to) {
       throw new TaskGraphError(
@@ -136,6 +142,7 @@ export function startTask(root: string, options: TransitionOptions): TaskDocumen
 
 /** `in_progress` -> `done`. */
 export function completeTask(root: string, options: TransitionOptions): TaskDocument {
+  if (readReviewState(root).tasks[options.id]?.enabled) return startReview(root, { ...options, trigger: 'auto' });
   return transitionTask(root, options.result === 'reject' ? 'reject' : 'done', options);
 }
 
@@ -164,7 +171,7 @@ export function describeAllowed(status: TaskStatus): string {
  * completion targets is done. Without declared targets there is no completion
  * contract, so the task cannot be marked done.
  */
-function assertCompletionComplete(root: string, current: TaskDocument): void {
+export function assertCompletionComplete(root: string, current: TaskDocument): void {
   const subgraph = current.subgraph;
   if (!subgraph) return;
   if (subgraph.completionRequires.length === 0) {

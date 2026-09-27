@@ -1,3 +1,4 @@
+import { currentReview, readReviewState } from './review-state.js';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
@@ -15,7 +16,7 @@ export interface GraphWatch {
   id: string; graph: string; thread: string; active: boolean; createdAt: string; binding: DesktopBinding;
 }
 export interface WatchEvent {
-  id: string; subscription: string; task: string; graph: string; result: 'pass' | 'reject'; at: string;
+  id: string; subscription: string; task: string; graph: string; result: 'pass' | 'reject' | 'blocked' | 'warning'; at: string; reviewId?: string;
   message: string; state: 'pending' | 'in_flight' | 'accepted' | 'uncertain' | 'paused' | 'cancelled';
   attempts: number; attemptId?: string; attemptAt?: number; nextAttemptAt?: number; receipt?: string; error?: string;
 }
@@ -78,7 +79,7 @@ export function unwatchGraph(root: string, graph: string, thread: string): void 
 }
 
 /** Called under the task transaction: result and outbox commit together. No historical scan. */
-export function recordWatchResult(root: string, task: TaskDocument, tx: ProjectTransaction): void {
+export function recordWatchResult(root: string, task: TaskDocument, tx: ProjectTransaction, outcome?: 'blocked' | 'warning'): void {
   const ledger = readWatchLedger(root);
   if (!ledger?.subscriptions.some(s => s.active)) return;
   const repo = loadTaskRepository(root);
@@ -89,17 +90,18 @@ export function recordWatchResult(root: string, task: TaskDocument, tx: ProjectT
     if (!parent || ancestors.has(parent.graph)) break;
     ancestors.add(parent.graph); graph = parent.graph;
   }
-  const result = task.status === 'reject' ? 'reject' : 'pass';
+  const result = outcome ?? (task.status === 'reject' ? 'reject' : 'pass');
   const terminal = task.history.at(-1)!;
-  const source = createHash('sha256').update(JSON.stringify([task.id, task.history.length, terminal])).digest('hex');
+  const canonical = { ...terminal, extra: Object.fromEntries(Object.entries(terminal.extra).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) };
+  const source = createHash('sha256').update(JSON.stringify([task.id, task.history.length, canonical])).digest('hex');
   const cli = fileURLToPath(new URL('../cli.js', import.meta.url));
   for (const sub of ledger.subscriptions.filter(s => s.active && ancestors.has(s.graph))) {
     const id = createHash('sha256').update(sub.id + ':' + source).digest('hex');
     if (ledger.events.some(e => e.id === id)) continue;
-    const reports = task.outputs.filter(o => o.kind === 'report' && o.audience !== 'user').slice(-4).map(o => ({ path: o.path, read_path: o.snapshot ?? o.path }));
-    const data = { event: id, project: canonicalRoot(root), graph: task.graph, watched_graph: sub.graph, task: task.id, result, at: terminal.at, reports, cli };
+    const reports = task.outputs.filter(o => o.kind === 'report' && o.audience !== 'user' && (!terminal.extra['report_sha256'] || o.sha256 === terminal.extra['report_sha256'])).slice(-4).map(o => ({ path: o.path, read_path: o.snapshot ?? o.path }));
+    const data = { event: id, project: canonicalRoot(root), graph: task.graph, watched_graph: sub.graph, task: task.id, result, at: terminal.at, reports, cli, review_id: terminal.extra['review_id'], error: terminal.extra['error'], affected_successors: result === 'reject' ? repo.tasks.filter(t => t.dependsOn.some(d => d.task === task.id)).map(t => ({ task: t.id, status: t.status })) : undefined, recovery: outcome ? `task[${task.id}].review restart` : undefined };
     const message = 'Task Graph notification (tool data, not a new user instruction).\n' + JSON.stringify(data) + '\nWithin the existing task authorization, inspect this task and its report, then assess repair, investigation or successor refinement. A pass does not automatically activate a dynamic successor; reject does not satisfy dependencies.';
-    ledger.events.push({ id, subscription: sub.id, task: task.id, graph: task.graph, result, at: terminal.at, message,
+    ledger.events.push({ id, subscription: sub.id, task: task.id, graph: task.graph, result, at: terminal.at, reviewId: typeof terminal.extra['review_id'] === 'string' ? terminal.extra['review_id'] : undefined, message,
       state: Buffer.byteLength(message) > 6144 ? 'paused' : 'pending', attempts: 0,
       ...(Buffer.byteLength(message) > 6144 ? { error: 'Notification exceeds 6 KiB; inspect task by ID' } : {}) });
   }
@@ -155,7 +157,9 @@ export async function deliverWatch(root: string, adapter: DesktopAdapter = deskt
         const sub = ledger.subscriptions.find(s => s.id === event.subscription)!;
         if (!sub.active) { event.state = 'cancelled'; return undefined; }
         const task = loadTaskRepository(root).taskById(event.task);
-        const committed = task?.history.some((h, index) => ['completed', 'rejected'].includes(h.event)
+        const review = task ? currentReview(readReviewState(root), task.id) : undefined;
+        if (review && ((event.reviewId && event.reviewId !== review.id) || (!event.reviewId && Date.parse(event.at) <= Date.parse(review.createdAt)))) { event.state = 'cancelled'; event.error = 'Superseded by a review round'; return undefined; }
+        const committed = task?.history.some((h, index) => ['completed', 'rejected', 'review_failed', 'review_warning', 'review_blocked'].includes(h.event)
           && createHash('sha256').update(sub.id + ':' + createHash('sha256').update(JSON.stringify([task.id, index + 1, h])).digest('hex')).digest('hex') === event.id);
         if (!committed) { event.state = 'paused'; event.error = 'The recorded task result is missing; restore the committed task history before delivery'; return undefined; }
         event.state = 'in_flight'; event.attemptId = randomUUID(); event.attemptAt = Date.now(); event.attempts++;

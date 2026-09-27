@@ -2,8 +2,8 @@ export const VIEWER_JS = String.raw`
 (function () {
   "use strict";
   var DATA = JSON.parse(document.getElementById("graph-data").textContent);
-  var STATUS_ORDER = ["todo", "in_progress", "done", "reject", "cancelled"];
-  var STATUS_LABEL = { todo: "Todo", in_progress: "Running", done: "Finished", reject: "Rejected", cancelled: "Cancelled" };
+  var STATUS_ORDER = ["todo", "in_progress", "pending_review", "done", "reject", "cancelled"];
+  var STATUS_LABEL = { todo: "Todo", in_progress: "Running", pending_review: "待审查", done: "Finished", reject: "Rejected", cancelled: "Cancelled" };
   var STATUS_ICON = { done: "\u2713", in_progress: "\u25cf", cancelled: "\u00d7" };
   var READINESS_ICON = { ready: "\u25b6", blocked: "!" };
   var TARGET_MARKER = "\u25c6";
@@ -42,6 +42,7 @@ export const VIEWER_JS = String.raw`
       .sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
   };
   var visualState = function (task) {
+    if (task.status === 'pending_review') return 'running';
     if (task.status === 'reject') return 'blocked';
     if (task.status === "cancelled") return "cancelled";
     if (task.status === "done") return "done";
@@ -49,6 +50,7 @@ export const VIEWER_JS = String.raw`
     return task.readiness === "ready" ? "ready" : "blocked";
   };
   var nodeIcon = function (task) {
+    if (task.status === 'pending_review') return '⌛';
     if (task.status === 'reject') return '\u2717';
     if (task.status === "cancelled") return STATUS_ICON.cancelled;
     if (task.status === "done") return STATUS_ICON.done;
@@ -90,11 +92,11 @@ export const VIEWER_JS = String.raw`
   function documentsFor(task) {
     return task.documents || { content: { id: 'content:inline', title: task.title, path: '', html: task.html }, reports: [], logs: [], handoffs: [], outputs: [] };
   }
-  var PANEL_LABELS = { overview: '概览', content: '任务要求', references: '参考', reports: '报告', logs: '工作记录', handoffs: '交接', outputs: '产物' };
+  var PANEL_LABELS = { overview: '概览', content: '任务要求', reviewRequirements: '验收要求', references: '参考', reports: '报告', logs: '工作记录', handoffs: '交接', outputs: '产物' };
   function tabsFor(task) {
     var docs = documentsFor(task);
     var tabs = [{ key: 'content', label: '任务要求' }];
-    ['references', 'reports', 'logs', 'handoffs', 'outputs'].forEach(function (key) {
+    ['reviewRequirements', 'references', 'reports', 'logs', 'handoffs', 'outputs'].forEach(function (key) {
       if (docs[key] && docs[key].length) tabs.push({ key: key, label: PANEL_LABELS[key] + ' · ' + docs[key].length });
     });
     return tabs;
@@ -507,6 +509,7 @@ export const VIEWER_JS = String.raw`
     html += "<dt>Graph</dt><dd>" + esc(task.graph) + "</dd>";
     html += "<dt>Status</dt><dd>" + esc(task.status) + "</dd>";
     if (task.planningState && task.planningState !== 'static') html += '<dt>Planning</dt><dd>' + esc(task.planningState) + '</dd>';
+    if (task.review) html += '<dt>自动审查</dt><dd>' + (task.review.enabled ? '开启' : '关闭') + '</dd>' + (task.review.current ? '<dt>审查轮次</dt><dd>' + esc(task.review.current.id) + ' · ' + esc(task.review.current.state) + '</dd><dt>审查日志</dt><dd>' + esc(task.review.current.log) + '</dd>' + (task.review.current.error ? '<dt>审查异常</dt><dd>' + esc(task.review.current.error) + '</dd>' : '') : '');
     if (task.kind === 'acceptance') html += '<dt>验收</dt><dd>' + esc(task.status === 'done' ? 'pass' : task.status === 'reject' ? 'reject' : '待验收') + '</dd>';
     html += "<dt>Readiness</dt><dd>" + esc(task.readiness) + "</dd>";
     html += "<dt>Claim</dt><dd>" + (task.claim ? esc(task.claim.role + " / " + task.claim.sessionId) : "\u2014") + "</dd>";

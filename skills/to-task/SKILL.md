@@ -150,3 +150,8 @@ CLI task list --available --cwd "<项目根目录>" --json
 ## 工作流来源
 
 本地改编自 Matt Pocock 的 `to-tickets`：保留纵向切片、明确阻塞、可审阅拆分及大范围重构例外；任务落地使用 task-graph。可以接收 to-spec、Wayfinder 或其他规划流程的明确产物，也可以直接接收对话中的已确认需求。
+
+
+## 需要独立审查时
+
+将验收条件绑定到任务的 `.review-requirement`，避免在 content 中重复维护。开工前确定 RR 并启用 `.auto-review` 可在执行者交付后自动审查；也可以读完完成报告、确定 RR 后手动 `.review start`。已有独立验收子任务时按实际责任选择启用位置，避免重复验收。详见 [独立审查](../../references/review.md)。

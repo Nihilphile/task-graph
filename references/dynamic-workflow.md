@@ -84,3 +84,8 @@ graph 是项目内图 ID，thread 是 Desktop 会话 UUID。主控确认是自�
 历史实机资料来自 subagent-cli：0.153.4 已验证已加载 Desktop 根会话的 idle 与 busy 后续轮投递。本仓库 2026-09-27 的有界实机测试确认 0.158.0-alpha.2.1：向已加载且忙碌的根会话投递，取得严格回执，当前 turn 结束后在后续 turn 实际收到同一事件。证据见 docs/work/dynamic-graph/desktop-smoke.md；不据一次成功推定所有会话状态均兼容。
 
 通知进入下一轮，不能声称注入正在执行的当前轮。主控忙时须结束 turn；不要持续轮询等待同一 turn 被通知。App 退出、会话未加载、切页、跨机器及中断恢复均不视为已验证保证。status 的 consumption 保持 unconfirmed；本版本不实现模型消费 ACK 或 exactly-once 消费承诺。
+
+
+## 独立审查
+
+新增 `.review-requirement` 多文件标签与 task/graph 的 `.auto-review`，手动启动使用 `task[ID].review start`。自动提交和手动审查都进入 pending_review，由 review finish 保存本轮报告及 pass/reject/blocked 结论。配置、现场验证、restart 和订阅语义见 [独立审查](review.md)。

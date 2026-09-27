@@ -9,6 +9,7 @@ import { readProjectManifest } from '../core/project.js';
 import { buildProject } from '../core/build.js';
 import { resolveCwd } from './paths.js';
 import { readGitHubState, type GitHubView } from '../core/github-state.js';
+import { kickReviewSupervisor } from '../core/review-runner.js';
 import { kickWatchWorker } from '../core/watch.js';
 import type { DesktopAdapter } from '../core/desktop-notify.js';
 import { prepareResource, resourceOutput } from './resources.js';
@@ -76,13 +77,16 @@ export async function main(argv: readonly string[], options: MainOptions = {}): 
       io.out(renderCommandHelp(command));
       return EXIT_OK;
     }
-    const readOnly = ['help', 'validate', 'skill validate', 'task list', 'task show'].includes(command.name);
+    const readOnly = ['help', 'validate', 'skill validate', 'task list', 'task show', 'task review status', 'task auto-review status', 'graph auto-review status'].includes(command.name);
     if (readOnly) return await command.run(ctx, args);
     if (command.name === 'graph watch' || command.name === 'graph unwatch') return await command.run(ctx, args);
     const output: string[] = [];
     let result: number;
     try { result = await command.run({ ...ctx, io: { out: text => output.push(text), err: io.err } }, args); }
     finally {
+      if (ctx.env['TASK_GRAPH_REVIEW_NO_SPAWN'] !== '1') {
+        try { kickReviewSupervisor(resolveCwd(ctx, args)); } catch (error) { io.err(`Review startup pending: ${String(error)}`); }
+      }
       if (!options.desktopAdapter) {
         try { kickWatchWorker(resolveCwd(ctx, args)); }
         catch (error) { io.err(`Desktop delivery pending: ${error instanceof Error ? error.message : String(error)}`); }

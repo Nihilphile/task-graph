@@ -10,7 +10,7 @@ import { loadTaskRepository } from './repo.js';
 import { computeReadiness } from './readiness.js';
 import { taskContext, formatTaskContext, contextFiles, type ContextOptions } from './task-context.js';
 
-export type DocumentKind = 'content' | 'report' | 'log' | 'handoff' | 'reference' | 'output';
+export type DocumentKind = 'content' | 'review-requirement' | 'report' | 'log' | 'handoff' | 'reference' | 'output';
 export interface DocumentView {
   readonly id: string;
   readonly kind: DocumentKind;
@@ -31,6 +31,7 @@ export interface DocumentView {
   readonly error?: string;
 }
 export interface TaskDocuments {
+  readonly reviewRequirements: readonly DocumentView[];
   readonly content: DocumentView;
   readonly contents: readonly DocumentView[];
   readonly reports: readonly DocumentView[];
@@ -130,7 +131,7 @@ export function snapshotDocument(transaction: ProjectTransaction, source: string
 
 export interface AttachDocumentOptions extends ClockOptions {
   readonly id: string;
-  readonly kind: 'content' | 'report' | 'log' | 'handoff' | 'reference';
+  readonly kind: 'content' | 'review-requirement' | 'report' | 'log' | 'handoff' | 'reference';
   readonly path: string;
   readonly title?: string;
   readonly note?: string;
@@ -142,14 +143,14 @@ export interface AttachDocumentOptions extends ClockOptions {
 export function withDocument(root: string, current: TaskDocument, transaction: ProjectTransaction, options: AttachDocumentOptions): TaskDocument {
   if (options.audience !== undefined && !['agent', 'user'].includes(options.audience)) throw new TaskGraphError('E_DOCUMENT_AUDIENCE', 'Audience must be agent or user');
   const file = documentPath(options.path);
-  if (options.kind === 'content') {
+  if (options.kind === 'content' || options.kind === 'review-requirement') {
     requireContent(root, file);
     if (options.audience === 'user') throw new TaskGraphError('E_CONTENT_AUDIENCE', 'Task requirements must be readable by the executing agent');
-    if (current.content === file) throw new TaskGraphError('E_DUP_OUTPUT', 'This file is already task content');
+    if (options.kind === 'content' && current.content === file) throw new TaskGraphError('E_DUP_OUTPUT', 'This file is already task content');
   }
   const bytes = readDocument(root, file);
   if (options.snapshot && options.kind !== 'reference') throw new TaskGraphError('E_DOCUMENT_MODE', '--snapshot is only supported for reference attachments');
-  const snapshot = options.kind === 'content' || options.kind === 'log' || (options.kind === 'reference' && !options.snapshot) ? {} : snapshotDocument(transaction, file, bytes);
+  const snapshot = options.kind === 'content' || options.kind === 'review-requirement' || options.kind === 'log' || (options.kind === 'reference' && !options.snapshot) ? {} : snapshotDocument(transaction, file, bytes);
   if (current.outputs.some((output) => output.path === file && output.kind === options.kind && output.sha256 === ('sha256' in snapshot ? snapshot.sha256 : undefined))) {
     throw new TaskGraphError('E_DUP_OUTPUT', `Task "${current.id}" already contains this ${options.kind} document`);
   }
@@ -185,7 +186,7 @@ export function setDocumentAudience(root: string, options: ClockOptions & { id: 
   const audience = options.audience;
   return mutateTaskDocument(root, options.id, current => {
     if (!current.outputs.some(o => o.path === file)) throw new TaskGraphError('E_NO_OUTPUT', `Task "${options.id}" does not list "${file}"`);
-    if (audience === 'user' && current.outputs.some(o => o.path === file && o.kind === 'content')) throw new TaskGraphError('E_CONTENT_AUDIENCE', 'Task requirements must remain agent-readable');
+    if (audience === 'user' && current.outputs.some(o => o.path === file && ['content', 'review-requirement'].includes(o.kind ?? ''))) throw new TaskGraphError('E_CONTENT_AUDIENCE', 'Task requirements must remain agent-readable');
     return { ...current, outputs: current.outputs.map(o => o.path === file ? { ...o, audience } : o),
       history: [...current.history, historyEntry('audience_changed', timestampOf(options.now), options.actor ?? null, { path: file, audience })] };
   });
@@ -230,7 +231,7 @@ export function taskDocuments(root: string, task: TaskDocument): TaskDocuments {
   const logs = sorted('log');
   const legacy = /^##[ \t]+工作记录[ \t]*\r?\n([\s\S]*?)(?=^##[ \t]+|(?![\s\S]))/m.exec(task.body)?.[1]?.trim();
   if (legacy) logs.push({ id: 'log:inline', kind: 'log', title: '任务正文中的工作记录', path: inline.path, body: legacy, html: renderDocumentMarkdown(root, inline.path, legacy) });
-  return { content, contents, reports: sorted('report'), logs, handoffs: sorted('handoff'), outputs: sorted('output'), references: sorted('reference') };
+  return { content, contents, reviewRequirements: sorted('review-requirement'), reports: sorted('report'), logs, handoffs: sorted('handoff'), outputs: sorted('output'), references: sorted('reference') };
 }
 
 export interface HandoffOptions extends ContextOptions {

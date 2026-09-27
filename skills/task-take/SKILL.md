@@ -29,6 +29,7 @@ CLI 'graph[<图ID>].task[<任务ID>]' show --cwd "<实际项目路径>" --json
 ## 2. 阅读后记录，再直接开工
 
 - 完整读取 context.contents 中的全部要求文件；旧版只有 context.content 时读取该入口。多个文件共同构成当前要求。清单中的 read_path 均相对 context.project_root；固定版本读取快照路径。
+- 读取 context.review_requirements 中的全部验收要求，与 content 的明确约束共同作为交付依据。
 - 浏览 context.references 的 summary 和 source_task，读取任务必需的资料与相关接口/章节。检查 error；summary 是索引，必要内容仍须实际读取。
 - 接续已有工作时，从 context.logs/reports/handoffs 的摘要定位所需文件。show 和 --handoff 默认只给索引；需要 CLI 返回正文时，用 `--expand-path <路径>` 选择文件，或 `--expand content|report|log|reference|handoff|output` 选择类别。可先加 --preview 查看体量。优先精确选择所需文件，读取当前任务要求后再决定其他资料。
 - context.excluded 中列出用途或路径排除项。audience=user 的附件仅供人阅读；旧自动 handoff 标记 legacy_aggregate 时可能包含混入的正文，使用当前索引恢复上下文。按项目交接要求排除的路径，用 --exclude-path 显式传入；不要因为旧快照引用了它而绕过排除。
@@ -67,6 +68,8 @@ CLI 'graph[<图ID>].task[<任务ID>]' complete --report <项目相对报告路�
 reference 默认跟随当前文件；需要保留固定交付版本时加 --snapshot。后继通过依赖自动取得登记，无需再次绑定。report 保存交付证据；handoff 用于同任务尚未完成时的接续，两者不能替代约定的 reference。
 
 供用户阅读、与任务施工无关的工具反馈等附件，attach 时加 --audience user，避免混入后继上下文。保存的自动 handoff 只冻结本任务要求及附件索引；需交接进展时将关键结论写入工作记录或独立 handoff 文件。
+
+若 task.review.enabled=true，complete 返回 pending_review 表示已交付、正在独立审查；到此结束执行工作，不能再次 complete/reject 绕过审查。审查由工具启动，结果和报告通过订阅返回主控。pending_review 不是新的施工派工状态。
 
 按任务约定的验收责任完成：普通实现任务完成自己的验证后 complete，后续独立验收由对应任务执行，父任务由主控读报告后收口；旧任务明确要求主控验收的，先用 `<任务地址>.report attach` 并记录待验收事项，保留当前状态。中途交接则记录已做、未做、证据及下一步，并用 `<任务地址>.handoff create` 保存交接。
 

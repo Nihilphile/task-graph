@@ -104,3 +104,8 @@ add 需要主控显式注册实际 Desktop UUID；status 只读。恢复投递�
 ## 兼容
 
 旧命令如 `task show T-0012`、`task report attach T-0012` 继续支持，原 JSON 形状保留。新地址作为入口路由到同一语义处理，不迁移任务数据、不改变完成条件。后续 skill 示例优先使用资源地址；历史报告中的旧命令仍然可执行。
+
+
+## 独立审查
+
+新增 `.review-requirement` 多文件标签与 task/graph 的 `.auto-review`，手动启动使用 `task[ID].review start`。自动提交和手动审查都进入 pending_review，由 review finish 保存本轮报告及 pass/reject/blocked 结论。配置、现场验证、restart 和订阅语义见 [独立审查](review.md)。

@@ -1,3 +1,4 @@
+import { reviewCommands } from './commands/review.js';
 import type { CommandSpec } from './context.js';
 import { createHelpCommand } from './commands/help.js';
 import { validateCommand } from './commands/validate.js';
@@ -30,6 +31,7 @@ export function createRegistry(): readonly CommandSpec[] {
     initCommand(),
     graphAddCommand(),
     ...graphWatchCommands(),
+    ...reviewCommands(),
     ...githubCommands(),
     taskAddCommand(),
     taskReviseCommand(),
