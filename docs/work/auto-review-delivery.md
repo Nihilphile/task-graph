@@ -18,6 +18,7 @@
 
 ## 验证
 
+- 后续真实多场景验收：7 个任务、5 轮真实 Codex 审查，验证自动 pass/reject、手动审查、blocked 后 restart 和后继门禁，详见 [实测记录](auto-review-real-scenarios.md)。
 - 定向回归：30/30 通过，覆盖审查、原通知机制、资源语法和 skill 校验。日志：`output/auto-review-targeted.log`。
 - 最终全量回归：`npm test` 完成 TypeScript 构建，264/264 通过，0 失败、0 跳过；耗时约 360 秒。日志：`output/auto-review-final-test.log`。
 - 新增 10 个审查测试，覆盖多 RR、图扫描、依赖门禁、幂等交卷、blocked/restart/过期回写、快照与现场、死进程、实际子进程、交卷后异常退出、部分事务恢复与多任务并行。
