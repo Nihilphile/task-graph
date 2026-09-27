@@ -1,5 +1,6 @@
 import { reviewView } from './review-state.js';
 import path from 'node:path';
+import { errorBookEntries, type ErrorBookEntry } from './error-book.js';
 import { projectPaths } from './layout.js';
 import { renderMarkdown } from './markdown.js';
 import { computeReadiness, type BlockedReason, type Readiness } from './readiness.js';
@@ -56,6 +57,7 @@ export interface ProjectedEdge {
 }
 
 export interface GraphProjection {
+  readonly errorBook?: readonly ErrorBookEntry[];
   readonly version: number;
   readonly project: {
     readonly name: string;
@@ -175,6 +177,7 @@ export function createGraphProjection(root: string): GraphProjection {
 
   return {
     version: PROJECTION_VERSION,
+    errorBook: errorBookEntries(repository, undefined, true),
     project: {
       name: manifest.name,
       schemaVersion: manifest.version,

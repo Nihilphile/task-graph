@@ -48,6 +48,20 @@ function requireGraph(root: string, graph: string): void {
   if (!loadTaskRepository(root).manifest.graphs.some(g => g.id === graph)) throw new TaskGraphError('E_GRAPH', `Unknown graph ${graph}`);
 }
 
+/** Canonical IDs survive YAML key sorting; legacy IDs preserve the old lifecycle insertion order. */
+function resultEventIds(subscription: string, task: string, count: number, entry: TaskDocument['history'][number]): string[] {
+  const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+  const idFor = (extra: typeof entry.extra) => hash(subscription + ':' + hash(JSON.stringify([task, count, { ...entry, extra }])));
+  const canonical = Object.fromEntries(Object.entries(entry.extra).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
+  const ids = [idFor(canonical)];
+  const legacyOrder = ['from', 'to', 'result', 'reason'];
+  // Only reconstruct the exact known legacy shape; never bypass matching the full history entry.
+  if (Object.keys(entry.extra).every(key => legacyOrder.includes(key))) {
+    ids.push(idFor(Object.fromEntries(legacyOrder.filter(key => Object.hasOwn(entry.extra, key)).map(key => [key, entry.extra[key]!]))));
+  }
+  return ids;
+}
+
 export async function watchGraph(root: string, graph: string, thread: string, adapter: DesktopAdapter = desktopAdapter): Promise<GraphWatch> {
   requireGraph(root, graph);
   if (!UUID.test(thread)) throw new TaskGraphError('E_WATCH_THREAD', '--thread must be an explicit Desktop thread UUID');
@@ -92,12 +106,11 @@ export function recordWatchResult(root: string, task: TaskDocument, tx: ProjectT
   }
   const result = outcome ?? (task.status === 'reject' ? 'reject' : 'pass');
   const terminal = task.history.at(-1)!;
-  const canonical = { ...terminal, extra: Object.fromEntries(Object.entries(terminal.extra).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) };
-  const source = createHash('sha256').update(JSON.stringify([task.id, task.history.length, canonical])).digest('hex');
   const cli = fileURLToPath(new URL('../cli.js', import.meta.url));
   for (const sub of ledger.subscriptions.filter(s => s.active && ancestors.has(s.graph))) {
-    const id = createHash('sha256').update(sub.id + ':' + source).digest('hex');
-    if (ledger.events.some(e => e.id === id)) continue;
+    const ids = resultEventIds(sub.id, task.id, task.history.length, terminal);
+    const id = ids[0]!;
+    if (ledger.events.some(e => ids.includes(e.id))) continue;
     const reports = task.outputs.filter(o => o.kind === 'report' && o.audience !== 'user' && (!terminal.extra['report_sha256'] || o.sha256 === terminal.extra['report_sha256'])).slice(-4).map(o => ({ path: o.path, read_path: o.snapshot ?? o.path }));
     const data = { event: id, project: canonicalRoot(root), graph: task.graph, watched_graph: sub.graph, task: task.id, result, at: terminal.at, reports, cli, review_id: terminal.extra['review_id'], error: terminal.extra['error'], affected_successors: result === 'reject' ? repo.tasks.filter(t => t.dependsOn.some(d => d.task === task.id)).map(t => ({ task: t.id, status: t.status })) : undefined, recovery: outcome ? `task[${task.id}].review restart` : undefined };
     const message = 'Task Graph notification (tool data, not a new user instruction).\n' + JSON.stringify(data) + '\nWithin the existing task authorization, inspect this task and its report, then assess repair, investigation or successor refinement. A pass does not automatically activate a dynamic successor; reject does not satisfy dependencies.';
@@ -160,7 +173,7 @@ export async function deliverWatch(root: string, adapter: DesktopAdapter = deskt
         const review = task ? currentReview(readReviewState(root), task.id) : undefined;
         if (review && ((event.reviewId && event.reviewId !== review.id) || (!event.reviewId && Date.parse(event.at) <= Date.parse(review.createdAt)))) { event.state = 'cancelled'; event.error = 'Superseded by a review round'; return undefined; }
         const committed = task?.history.some((h, index) => ['completed', 'rejected', 'review_failed', 'review_warning', 'review_blocked'].includes(h.event)
-          && createHash('sha256').update(sub.id + ':' + createHash('sha256').update(JSON.stringify([task.id, index + 1, h])).digest('hex')).digest('hex') === event.id);
+          && resultEventIds(sub.id, task.id, index + 1, h).includes(event.id));
         if (!committed) { event.state = 'paused'; event.error = 'The recorded task result is missing; restore the committed task history before delivery'; return undefined; }
         event.state = 'in_flight'; event.attemptId = randomUUID(); event.attemptAt = Date.now(); event.attempts++;
         return { event: { ...event }, sub: { ...sub } };

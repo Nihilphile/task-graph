@@ -27,8 +27,8 @@ interface StatusCommandConfig {
 const COMMANDS: readonly StatusCommandConfig[] = [
   {
     action: 'reject', summary: 'Record a failed result, release claim and keep successors blocked', verb: 'Rejected',
-    usage: 'task-graph task reject T-NNNN --report <file> [--log <text>] [--reason <text>] [--cwd <dir>] [--json]',
-    details: ['Acceptance tasks require a report. Reopen explicitly for another attempt; previous results stay in history. Reject does not satisfy dependencies or parent completion.'],
+    usage: 'task-graph task reject T-NNNN --error-report <file.md> --report <file> [--log <text>] [--reason <text>] [--actor <name>] [--cwd <dir>] [--json]',
+    details: ['Every rejection requires a non-empty Markdown --error-report for the error-book. Acceptance tasks also require a report. Reopen explicitly for another attempt; previous results stay in history. Reject does not satisfy dependencies or parent completion.'],
     run: (root, options) => rejectTask(root, options),
   },
   {
@@ -51,12 +51,12 @@ const COMMANDS: readonly StatusCommandConfig[] = [
     summary: 'Move a task from in_progress to done',
     verb: 'Completed',
     usage:
-      'task-graph task complete T-NNNN [--result pass|reject] [--report <file>]... [--log <text>] [--reason <text>] [--actor <name>] [--cwd <dir>] [--json]',
+      'task-graph task complete T-NNNN [--result pass|reject] [--report <file>]... [--error-report <file.md>] [--log <text>] [--reason <text>] [--actor <name>] [--cwd <dir>] [--json]',
     details: [
       'Only a running task can be completed; todo -> done is not a supported transition.',
       'A composite task is refused until every completion_requires target is done.',
       'Reports, log, completion and claim release are saved atomically. Reports are snapshotted.',
-      'Acceptance tasks require an explicit --result and report. Reject keeps consumers and parent completion blocked.',
+      'Acceptance tasks require an explicit --result and report. --result reject also requires --error-report <file.md>. Reject keeps consumers and parent completion blocked.',
     ],
     run: (root, options) => completeTask(root, options),
   },
@@ -120,6 +120,7 @@ function statusCommand(config: StatusCommandConfig): CommandSpec {
         reports: args.all('report'),
         log: args.opt('log'),
         result,
+        errorReport: args.opt('error-report'),
       });
       const context = config.action === 'start' || config.action === 'reopen' ? taskContext(root, task) : undefined;
 

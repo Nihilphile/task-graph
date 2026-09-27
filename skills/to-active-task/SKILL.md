@@ -107,7 +107,7 @@ CLI 'graph[<图ID>].task[<ID>].content' attach --path docs/tasks/details.md --su
 
 需要主控主要通过报告掌握交付质量时，可以把独立验收作为子图中的完成目标，使用 `--kind acceptance`，依赖待验证的实现。预先确定验收标准，具体运行入口随实现补齐，交给独立执行者验证。
 
-验收者通过 `'graph[<图ID>].task[<ID>]' complete --result pass --report <报告>` 或 `'graph[<图ID>].task[<ID>]' reject --report <报告>` 保存结果与证据。主控读报告判断下一步；失败可能需要定位、修复、重新讨论或复验，采用哪种安排取决于证据。
+验收者通过 `'graph[<图ID>].task[<ID>]' complete --result pass --report <报告>` 或 `'graph[<图ID>].task[<ID>]' reject --report <报告> --error-report <失败小报告.md>` 保存结果与证据。主控读报告判断下一步；失败可能需要定位、修复、重新讨论或复验，采用哪种安排取决于证据。
 
 工具保留失败报告，reject 继续阻塞后继和父任务完成目标。复验使用显式 reopen，动态任务仍需当前有效的 refinement。环境缺失导致无法验证时，可以记录缺口并 block。父任务的 completion_requires 全部满足后，由主控审阅结果并显式 complete 收口；既有任务另有验收责任约定时按其约定执行。
 

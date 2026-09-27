@@ -82,6 +82,9 @@ export function renderIndexHtml(projection: GraphProjection): string {
 }
 
 const VIEWER_CSS = `
+.node.error-book .node-body { fill:#fff8ed; stroke:#d99b39; }
+.error-book-entry { border-top:1px solid var(--line); padding:12px 0; overflow-wrap:anywhere; }
+.error-book-entry h4 { margin:0 0 8px; }
 :root { --bg:#f7f8fa; --panel:#fff; --line:#d0d5dd; --text:#101828; --muted:#667085; --accent:#2f6feb; }
 * { box-sizing:border-box; }
 body { margin:0; font:14px/1.5 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif; color:var(--text); background:var(--bg); }

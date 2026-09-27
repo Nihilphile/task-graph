@@ -58,6 +58,10 @@ node dist/src/cli.js 'task[T-0001]' show --handoff --cwd /path/to/project --json
 
 成功修改会生成目标项目中的 `.task-graph/generated/index.html`。直接编辑要求文件后，执行 `node dist/src/cli.js . build --cwd /path/to/project --json` 刷新视图。
 
+## Error-book
+
+每次 reject 通过 `--error-report <文件.md>` 提交一份简短失败复盘。工具将其随结果保存为快照，并追加到图内独立的 error-book 方块；点击按时间阅读，可跳回对应任务。当前版本只追加小报告，不做模式统计。CLI 支持 `errorbook list/show` 和 `'graph[G-001].errorbook' list/show`。详见 [error-book 指南](references/error-book.md)。
+
 ## GitHub 同步
 
 创建入口图时加 `--gh`，也可对已有图开启：

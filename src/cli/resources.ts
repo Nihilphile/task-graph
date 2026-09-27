@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { errorBookEntries } from '../core/error-book.js';
 import path from 'node:path';
 import { parseArgs, type ParsedArgs } from './args.js';
 import type { CliContext, CommandSpec } from './context.js';
@@ -27,6 +28,7 @@ function graphAddress(graph: string): string {
 
 /** A deliberately small address grammar, never evaluated as JavaScript. */
 export function parseResource(address: string): ResourceAddress {
+  if (address === 'errorbook') return { address, type: 'error-book' };
   if (['.', 'graph', 'task', 'source', 'github', 'skill'].includes(address)) return { address, type: address };
   const invalid = (): never => {
     throw usageError(`Invalid resource address "${address}"`, ["Use 'graph[G-001].task[T-0001]' or run task-graph . describe."]);
@@ -52,6 +54,7 @@ export function parseResource(address: string): ResourceAddress {
   if (tail) {
     if (type === 'graph-item' && tail === '.watch') type = 'watch';
     else if (type === 'graph-item' && tail === '.auto-review') type = 'graph-auto-review';
+    else if (type === 'graph-item' && tail === '.errorbook') type = 'error-book';
     else if (task && /^\.(content|review-requirement|review|auto-review|report|reference|log|handoff|output|dependency|subgraph)$/.test(tail)) type = tail.slice(1);
     else return invalid();
   }
@@ -91,6 +94,7 @@ function routes(resource: ResourceAddress, commands: readonly CommandSpec[]): Ro
   };
   const read = (action: string, summary: string) => result.push({ action, summary });
   switch (resource.type) {
+    case 'error-book': read('list', 'List appended failure report snapshots'); read('show', 'Read failure reports in chronological order'); break;
     case '.':
       for (const action of ['init', 'validate', 'build']) add(action, action);
       break;
@@ -139,9 +143,9 @@ function routes(resource: ResourceAddress, commands: readonly CommandSpec[]): Ro
 }
 
 function children(resource: ResourceAddress): string[] {
-  if (resource.type === '.') return ['graph', 'task', 'source', 'github', 'skill'];
+  if (resource.type === '.') return ['graph', 'task', 'source', 'github', 'skill', 'errorbook'];
   if (resource.type === 'graph') return ['graph[G-NNN]'];
-  if (resource.type === 'graph-item') return [`${resource.address}.task`, `${resource.address}.watch`, `${resource.address}.auto-review`];
+  if (resource.type === 'graph-item') return [`${resource.address}.task`, `${resource.address}.watch`, `${resource.address}.auto-review`, `${resource.address}.errorbook`];
   if (resource.type === 'task') return [resource.address !== 'task' ? `${resource.address}[T-NNNN]` : 'graph[G-NNN].task[T-NNNN]'];
   if (resource.type === 'subgraph') return [`${resource.address}.task`];
   if (resource.type === 'task-item') return ['content', 'review-requirement', 'auto-review', 'review', 'reference', 'report', 'log', 'handoff', 'output', 'dependency', 'subgraph'].map(k => `${resource.address}.${k}`);
@@ -217,8 +221,9 @@ function resourceUsage(resource: ResourceAddress, route: Route): string {
   return `task-graph '${resource.address}' ${route.action}${suffix}`;
 }
 
-function query(resource: ResourceAddress, repository: TaskRepository, root: string): Record<string, unknown> {
+function query(resource: ResourceAddress, repository: TaskRepository, root: string, action: string): Record<string, unknown> {
   const address = resource.address;
+  if (resource.type === 'error-book') return { resource: address, project_root: root, entries: errorBookEntries(repository, resource.graph, action === 'show') };
   if (resource.type === 'graph') return { resource: address, graphs: repository.manifest.graphs.map(g => ({ ...g, resource: graphAddress(g.id), entry: repository.manifest.entryGraphs.includes(g.id) })) };
   if (resource.type === 'graph-item') {
     const graph = repository.manifest.graphs.find(g => g.id === resource.graph)!;
@@ -247,7 +252,7 @@ export interface ResourceInvocation { argv: string[]; resource: ResourceAddress;
 /** Returns undefined for a legacy spelling, null for a completed read-only request. */
 export function prepareResource(argv: readonly string[], ctx: CliContext, commands: readonly CommandSpec[]): ResourceInvocation | null | undefined {
   const first = argv[0] ?? '';
-  const resourceSyntax = first === '.' || first.includes('[') || first.includes(']') || first.startsWith('graph.')
+  const resourceSyntax = first === '.' || first === 'errorbook' || first.includes('[') || first.includes(']') || first.startsWith('graph.')
     || (['graph', 'task', 'source', 'github', 'skill'].includes(first) && ['describe', '--help', '-h'].includes(argv[1] ?? ''))
     || (first === 'graph' && argv[1] === 'list');
   if (!resourceSyntax) return undefined;
@@ -275,7 +280,7 @@ export function prepareResource(argv: readonly string[], ctx: CliContext, comman
   const repository = inspection?.repository;
   if (!route.command) {
     if (args.positionals.length || [...args.options.keys()].some(k => !['json', 'cwd', 'quiet'].includes(k))) throw usageError('This query accepts only --cwd, --json and --quiet.');
-    emit(ctx, args, query(resource, repository!, root)); return null;
+    emit(ctx, args, query(resource, repository!, root, action)); return null;
   }
   const options = new Map([...args.options].map(([key, values]) => [key, [...values]]));
   const allowed = new Set([...route.command.usage.matchAll(/--([a-z][a-z-]*)/g)].map(m => m[1]!));

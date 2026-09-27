@@ -36,9 +36,11 @@ start/claim/reassign 拒绝未放行的动态任务。执行中不允许通过 C
 
 ```text
 CLI 'task[T-0001]' complete --result pass --report reports/pass.md --cwd "<项目根目录>" --json
-CLI 'task[T-0001]' reject --report reports/reject.md --cwd "<项目根目录>" --json
-CLI 'task[T-0001]' complete --result reject --report reports/reject.md --cwd "<项目根目录>" --json
+CLI 'task[T-0001]' reject --report reports/reject.md --error-report reports/error.md --cwd "<项目根目录>" --json
+CLI 'task[T-0001]' complete --result reject --report reports/reject.md --error-report reports/error.md --cwd "<项目根目录>" --json
 ```
+
+reject 还必须提供非空 Markdown 小报告 --error-report，写法见 [error-book](error-book.md)。
 
 以上写法按实际结果选一条（reject 两种等价写法）。验收任务必须提供明确结果和本轮报告。pass 对应 status=done；reject 是独立状态，均释放 claim、保存报告快照与历史。旧普通任务 complete 可不传 result，保持兼容。
 

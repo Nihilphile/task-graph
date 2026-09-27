@@ -358,6 +358,9 @@ export const VIEWER_JS = String.raw`
     var selected = visible.find(function (task) { return task.id === state.task; });
     if (selected) viewport.appendChild(renderNode(selected, positions[selected.id]));
     var boxes = Object.keys(positions).map(function (id) { return positions[id]; }).concat(Object.keys(sourcePositions).map(function (id) { return sourcePositions[id]; }));
+    var bookBox = { x: PAD, y: boxes.length ? Math.max.apply(null, boxes.map(function (b) { return b.y + b.height; })) + GAP_Y : PAD, width: NODE_W, height: 88 };
+    viewport.appendChild(renderErrorBookNode(bookBox));
+    boxes.push(bookBox);
     if (boxes.length) {
       var minX = Math.min.apply(null, boxes.map(function (b) { return b.x; })), minY = Math.min.apply(null, boxes.map(function (b) { return b.y; }));
       graphBounds = { x: minX, y: minY,
@@ -380,6 +383,40 @@ export const VIEWER_JS = String.raw`
       : "Filtering " + activeFilters().join(", ") + " \u2014 " + visible.length + "/" + all.length + " task(s).";
   }
 
+  function currentErrorBook() {
+    var included = {}; included[state.graph] = true;
+    var changed = true;
+    while (changed) {
+      changed = false;
+      DATA.tasks.forEach(function (task) {
+        if (included[task.graph] && task.subgraph && !included[task.subgraph.graph]) { included[task.subgraph.graph] = true; changed = true; }
+      });
+    }
+    return (DATA.errorBook || []).filter(function (entry) { return included[entry.graph]; });
+  }
+  function renderErrorBookNode(position) {
+    var group = svgEl('g', { class: 'node error-book' + (state.panel === 'error-book' ? ' selected' : ''),
+      transform: 'translate(' + position.x + ',' + position.y + ')', 'data-kind': 'error-book', tabindex: 0, role: 'button', 'aria-label': '打开 error-book 错题本' });
+    group.appendChild(svgEl('rect', { class: 'node-body', width: position.width, height: position.height, rx: 8 }));
+    var title = svgEl('text', { class: 'title', x: 14, y: 29 }); title.textContent = 'error-book · 错题本'; group.appendChild(title);
+    var subtitle = svgEl('text', { class: 'meta', x: 14, y: 56 }); subtitle.textContent = '点击阅读失败小报告'; group.appendChild(subtitle);
+    return group;
+  }
+  function renderErrorBook(body) {
+    var entries = currentErrorBook();
+    var html = '<h3>error-book · 错题本</h3><p class="muted">当前图及子图 · 按时间追加</p>';
+    if (!entries.length) html += '<p>暂无失败小报告。</p>';
+    entries.forEach(function (entry) {
+      html += '<article class="error-book-entry"><h4>' + esc(entry.at) + '</h4><p><button type="button" data-error-task="' + esc(entry.task) + '">' + esc(entry.task + ' · ' + entry.title) + '</button></p>';
+      if (entry.actor) html += '<p class="muted">Reviewer: ' + esc(entry.actor) + '</p>';
+      html += '<div class="markdown">' + (entry.report.html || '<p>' + esc(entry.report.error || '无法读取小报告') + '</p>') + '</div>';
+      if (entry.evidence.length) html += '<details><summary>本轮验收报告快照</summary>' + entry.evidence.map(function (file) {
+        return '<p><a target="_blank" rel="noopener" href="../../' + file.split('/').map(encodeURIComponent).join('/') + '">' + esc(file) + '</a></p>';
+      }).join('') + '</details>';
+      html += '</article>';
+    });
+    body.innerHTML = html;
+  }
   function edgePath(from, to) {
     var x1 = from.x + from.width, y1 = from.y + from.height / 2, x2 = to.x, y2 = to.y + to.height / 2;
     var bend = Math.max(30, (x2 - x1) / 2);
@@ -494,6 +531,7 @@ export const VIEWER_JS = String.raw`
 
   function renderDetails() {
     var body = document.getElementById("details-body");
+    if (state.panel === 'error-book') { renderErrorBook(body); return; }
     var task = state.task ? tasksById[state.task] : null;
     if (!task) { body.innerHTML = githubBadge(graphsById[state.graph]) + '<p class="muted">Select a task node.</p>'; return; }
     if (state.panel !== 'overview') { renderDocumentPanel(task, body); return; }
@@ -619,7 +657,7 @@ export const VIEWER_JS = String.raw`
   function writeHash() {
     var hash = "#graph=" + encodeURIComponent(state.graph || "") +
       (state.task ? "&task=" + encodeURIComponent(state.task) : "") +
-      (state.task && state.panel !== 'overview' ? '&panel=' + encodeURIComponent(state.panel) : '') +
+      ((state.task && state.panel !== 'overview') || state.panel === 'error-book' ? '&panel=' + encodeURIComponent(state.panel) : '') +
       (state.task && state.document ? '&document=' + encodeURIComponent(state.document) : '');
     if (window.location.hash === hash) return;
     try {
@@ -640,6 +678,7 @@ export const VIEWER_JS = String.raw`
     var graphId = params.graph || (entry ? entry.id : null);
     if (!graphId) { renderGraph(); return; }
     selectGraph(graphId, params.task || null);
+    if (params.panel === 'error-book' && graphsById[state.graph]) { state.task = null; state.panel = 'error-book'; renderGraph(); renderDetails(); writeHash(); return; }
     if (state.task && PANEL_LABELS[params.panel]) {
       state.panel = params.panel; state.document = params.document || null;
       renderGraph(); renderDetails(); writeHash();
@@ -683,6 +722,11 @@ export const VIEWER_JS = String.raw`
   var svg = document.getElementById("graph");
   document.getElementById('details-body').addEventListener('click', function (event) {
     var button = event.target.closest('button');
+    if (button && button.hasAttribute('data-error-task')) {
+      var errorTask = tasksById[button.getAttribute('data-error-task')];
+      if (errorTask) selectGraph(errorTask.graph, errorTask.id);
+      return;
+    }
     if (!button || !state.task) return;
     if (button.hasAttribute('data-panel')) selectPanel(state.task, button.getAttribute('data-panel'));
     else if (button.hasAttribute('data-document')) {
@@ -696,6 +740,11 @@ export const VIEWER_JS = String.raw`
   });
   function activateCanvasTarget(target, keyboard) {
     if (!target || typeof target.closest !== 'function') return;
+    if (target.closest('[data-kind="error-book"]')) {
+      if (collapseTimer) clearTimeout(collapseTimer);
+      state.task = null; state.panel = 'error-book'; state.document = null;
+      renderGraph(); renderDetails(); writeHash(); return;
+    }
     var node = target.closest('.node[data-task]');
     if (!node) { if (!target.closest('.node')) selectTask(null); return; }
     var id = node.getAttribute('data-task'), task = tasksById[id];

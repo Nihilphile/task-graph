@@ -33,6 +33,7 @@ export function renderHelp(commands: readonly CommandSpec[]): string {
     `  ${PROGRAM} 'graph[G-001].task' add --summary <text> --content <file>`,
     `  ${PROGRAM} 'graph[G-001].task[T-0001].report' list`,
     `  ${PROGRAM} 'task[T-0001].subgraph.task' list`,
+    `  ${PROGRAM} 'graph[G-001].errorbook' show`,
     `  ${PROGRAM} . describe`,
     '',
     'Legacy command aliases (still supported):',

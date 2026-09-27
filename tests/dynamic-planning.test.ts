@@ -93,7 +93,7 @@ test('Reject preserves evidence, blocks successors/parent and supports explicit 
   await run('task', 'start', 'T-0001');
   await run('task', 'start', v, '--role', 'tester', '--session-id', 'test-session');
   assert.notEqual((await run('task', 'complete', v)).code, 0);
-  assert.equal((await run('task', 'reject', v, '--report', 'report.md')).code, 0);
+  assert.equal((await run('task', 'reject', v, '--report', 'report.md', '--error-report', 'report.md')).code, 0);
   const rejected = (await run('task', 'show', v)).task;
   assert.equal(rejected.status, 'reject'); assert.equal(rejected.claim, null);
   assert.notEqual((await run('task', 'start', next)).code, 0);

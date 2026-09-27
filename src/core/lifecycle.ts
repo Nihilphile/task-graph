@@ -4,7 +4,7 @@ import { TaskGraphError } from './errors.js';
 import { loadTaskRepository } from './repo.js';
 import { historyEntry, type TaskDocument, type TaskStatus } from './task.js';
 import { assertNotCancelled, mutateTaskDocument, timestampOf, type ClockOptions } from './mutate.js';
-import { appendManagedLog, saveHandoff, withDocument } from './documents.js';
+import { appendManagedLog, saveHandoff, withDocument, documentPath, readDocument, snapshotDocument } from './documents.js';
 import { computeReadiness, describeReadiness } from './readiness.js';
 
 /**
@@ -44,6 +44,7 @@ export interface TransitionOptions extends ClockOptions {
   readonly reports?: readonly string[];
   readonly log?: string;
   readonly result?: 'pass' | 'reject';
+  readonly errorReport?: string;
 }
 
 /**
@@ -95,6 +96,18 @@ export function transitionTask(
       throw new TaskGraphError('E_ACCEPTANCE_RESULT', 'Acceptance completion requires --result pass|reject and --report <evidence file>');
     }
 
+    if (to !== 'reject' && options.errorReport !== undefined) throw new TaskGraphError('E_ERROR_REPORT', '--error-report is only supported for reject results');
+    let errorDetails = {};
+    if (to === 'reject') {
+      if (!options.errorReport?.trim()) throw new TaskGraphError('E_ERROR_REPORT', 'Reject requires --error-report <Markdown file>: briefly describe the failure, failure mode, and cause or improvement.');
+      const file = documentPath(options.errorReport);
+      const bytes = readDocument(root, file);
+      if (!/\.(md|markdown)$/i.test(file) || !bytes.toString('utf8').trim()) throw new TaskGraphError('E_ERROR_REPORT', '--error-report must be a non-empty Markdown file');
+      const saved = snapshotDocument(transaction, file, bytes);
+      errorDetails = { error_report: file, error_snapshot: saved.snapshot, error_sha256: saved.sha256,
+        error_reviewer_role: current.claim?.role ?? null, error_reviewer_session: current.claim?.sessionId ?? null };
+    }
+
     let next = current;
     if (to === 'in_progress') {
       const readiness = computeReadiness(loadTaskRepository(root)).get(current.id)!;
@@ -109,7 +122,13 @@ export function transitionTask(
       next = saveHandoff(root, { ...next, status: to }, transaction, { ...options, title: `派工 · ${at}` });
     }
     if (to === 'done' || to === 'reject') {
-      for (const report of options.reports ?? []) next = withDocument(root, next, transaction, { ...options, path: report, kind: 'report' });
+      const evidence: string[] = [];
+      for (const report of options.reports ?? []) {
+        next = withDocument(root, next, transaction, { ...options, path: report, kind: 'report' });
+        const output = [...next.outputs].reverse().find(o => o.kind === 'report' && o.path === documentPath(report));
+        if (output?.snapshot) evidence.push(output.snapshot);
+      }
+      if (to === 'reject') errorDetails = { ...errorDetails, error_evidence: evidence };
       if (options.log !== undefined) next = appendManagedLog(root, next, transaction, options.log, options);
       if (next.claim) {
         next = { ...next, claim: null, history: [...next.history,
@@ -129,6 +148,7 @@ export function transitionTask(
           to,
           ...((to === 'done' && options.result) || to === 'reject' ? { result: to === 'done' ? 'pass' : 'reject' } : {}),
           ...(options.reason === undefined ? {} : { reason: options.reason }),
+          ...errorDetails,
         }),
       ],
     };

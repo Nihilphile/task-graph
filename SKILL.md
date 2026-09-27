@@ -168,11 +168,13 @@ CLI 'task[T-0001]' show --cwd "<项目根目录>" --json
 
 `--report` 可重复传入多份报告。报告快照、工作记录、状态变更和结束领取在同一事务中保存。已启用 auto-review 的任务进入 `pending_review`，由独立审查者决定结果；普通任务按既有完成规则进入 `done`。工具检查状态与图约束；报告内容是否满足业务要求由负责验收的人或 Agent 判断。复合任务的完成目标全部完成后，还需显式 complete 父任务。
 
-普通独立验收任务创建时加 `--kind acceptance`，依赖必要实现并纳入父任务完成目标。通过使用 `'task[<ID>]' complete --result pass --report <报告>`，失败用 `'task[<ID>]' reject --report <报告>`；两者均须提供本轮报告。reject 保留证据、释放领取，并继续阻塞后继与父任务。修复后显式 reopen 复验；动态验收任务先由主控重新 refine。
+普通独立验收任务创建时加 `--kind acceptance`，依赖必要实现并纳入父任务完成目标。通过使用 `'task[<ID>]' complete --result pass --report <报告>`，失败用 `'task[<ID>]' reject --report <报告> --error-report <失败小报告.md>`；两者均须提供本轮报告。reject 保留证据、释放领取，并继续阻塞后继与父任务。修复后显式 reopen 复验；动态验收任务先由主控重新 refine。
 
 如果已有其他执行者领取，先核查其进展，需要接替时使用 `'task[T-0001]' reassign`；领取不会自动过期。遇到外部阻塞，使用 `'task[T-0001]' block` 记录原因，解除时用 `'task[T-0001]' unblock`。详细参数通过 `CLI help "命令名"` 查看。
 
 ## 5. 阅读与交付 HTML
+
+每次 reject 前由 reviewer 写一份简短失败复盘，用 `--error-report <文件.md>` 一起提交。小报告记录失败、失败模式、原因与改进；可在本轮验收报告中写入复盘后复用同一路径。图中的独立 error-book 方块按时间展示当前图及子图的小报告，CLI 用 `'graph[<ID>].errorbook' show` 阅读。格式与保存规则见 [error-book 指南](references/error-book.md)。
 
 成功的结构化修改自动校验并重建视图。任务要求及 Markdown 正文可直接编辑；直接编辑文件后执行：
 
