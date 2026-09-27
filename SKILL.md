@@ -290,3 +290,17 @@ CLI graph add --title "功能交付" --entry --gh --cwd "<项目根目录>" --js
 | `build` | 重新生成 `graph.json` 和 `index.html` |
 | `skill validate` | 核对本 Skill 文档与实际注册的 CLI 命令 |
 | `help` | 查看命令列表或单个命令的用法 |
+| `task review-requirement attach` | 绑定验收要求文件，支持多文件与摘要 |
+| `task review-requirement remove` | 移除 RR 绑定，已开启审查时保留有效 RR |
+| `task auto-review enable` | 启用任务自动审查，可保存执行配置 |
+| `task auto-review disable` | 显式关闭任务自动审查 |
+| `task auto-review status` | 查看任务有效审查配置 |
+| `graph auto-review enable` | 扫描有有效 RR 的任务，保留显式关闭 |
+| `graph auto-review status` | 查看本图任务的审查配置 |
+| `review configure` | 配置项目级审查默认值 |
+| `task review configure` | 配置任务的模型、推理与交付模式 |
+| `task review start` | 对已完成任务手动启动独立审查 |
+| `task review finish` | 按本轮身份提交报告与 pass/reject/blocked |
+| `task review restart` | 异常或 blocked 后对相同交付重新审查 |
+| `task review status` | 查看轮次、日志、进程和报告 |
+| `task review recover` | 核对异常退出或中断的运行记录 |

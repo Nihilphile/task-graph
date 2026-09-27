@@ -14,7 +14,7 @@ export const DEFAULT_REVIEW_CONFIG: ReviewConfig = { model: 'gpt-6-sol', reasoni
 export interface FrozenFile { path: string; read_path: string; sha256: string; kind: string; source_task: string; }
 export interface Delivery {
   id: string; mode: 'snapshot' | 'live'; sourceRoot: string; workspace: string;
-  head?: string; files: { path: string; sha256: string }[]; capturedAt: string;
+  head?: string; files: { path: string; sha256: string; mode?: number }[]; capturedAt: string;
 }
 export interface ReviewRun {
   id: string; task: string; trigger: 'auto' | 'manual'; submission: string;
@@ -77,5 +77,7 @@ export function reviewView(root: string, task: string) {
   return { enabled: policy?.enabled ?? false, explicitly_disabled: policy?.disabled === true,
     config: { ...DEFAULT_REVIEW_CONFIG, ...state.defaults, ...policy?.config },
     current: run ? { id: run.id, submission: run.submission, state: run.state, trigger: run.trigger, config: run.config,
-      created_at: run.createdAt, error: run.error, report: run.report, log: run.log, session_id: run.sessionId } : null };
+      created_at: run.createdAt, error: run.error, report: run.report, log: run.log, session_id: run.sessionId,
+      delivery: { id: run.delivery.id, mode: run.delivery.mode, workspace: run.delivery.workspace, captured_at: run.delivery.capturedAt, head: run.delivery.head, file_count: run.delivery.files.length },
+      materials: run.materials } : null };
 }

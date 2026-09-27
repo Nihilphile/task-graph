@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, writeFileSync, lstatSync, statSync, readdirSync, realpathSync } from 'node:fs';
+import { mkdirSync, writeFileSync, chmodSync, lstatSync, statSync, readdirSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { readDocument, documentPath } from './documents.js';
 import { TaskGraphError } from './errors.js';
@@ -29,13 +29,13 @@ function sourceFiles(root: string): { paths: string[]; head?: string } {
     walk(''); return { paths: paths.sort() };
   }
 }
-function entries(root: string): { path: string; sha256: string }[] {
+function entries(root: string): { path: string; sha256: string; mode: number }[] {
   return sourceFiles(root).paths.flatMap(p => {
     const file = documentPath(p);
     let stat;
     try { stat = lstatSync(path.join(root, file)); } catch { return []; } // tracked deletion
     if (stat.isSymbolicLink() || !stat.isFile()) throw new TaskGraphError('E_REVIEW_DELIVERY', `Cannot freeze symlink/submodule or non-file: ${file}`);
-    return [{ path: file, sha256: digest(readDocument(root, file)) }];
+    return [{ path: file, sha256: digest(readDocument(root, file)), mode: stat.mode & 0o777 }];
   });
 }
 /** Copy actual working bytes, including dirty/untracked files. Long I/O is outside the project lock. */
@@ -49,7 +49,16 @@ export function captureDelivery(root: string, mode: Delivery['mode']): Delivery 
       if (digest(bytes) !== file.sha256) throw new TaskGraphError('E_REVIEW_CHANGED', 'Delivery changed while capturing; submit again');
       const target = path.join(workspace, file.path);
       mkdirSync(path.dirname(target), { recursive: true }); writeFileSync(target, bytes);
+      chmodSync(target, file.mode);
     }
+    // A nested plain directory would let git-aware checks discover the live parent repository.
+    // Use an independent repository containing only this captured working tree, with no remotes/hooks.
+    const git = (args: string[]) => execFileSync('git', args, { cwd: workspace, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    git(['init', '--quiet']);
+    git(['config', 'core.autocrlf', 'false']);
+    git(['-c', 'core.hooksPath=.git/no-hooks', 'add', '--all', '--force']);
+    git(['-c', 'core.hooksPath=.git/no-hooks', '-c', 'user.name=Task Graph Review', '-c', 'user.email=review@task-graph.local', '-c', 'commit.gpgsign=false',
+      'commit', '--quiet', '--allow-empty', '-m', `Frozen review delivery ${id}`]);
   }
   if (JSON.stringify(files) !== JSON.stringify(entries(root))) throw new TaskGraphError('E_REVIEW_CHANGED', 'Delivery changed while capturing; submit again');
   return { id, mode, sourceRoot: realpathSync(root), workspace, head: source.head, files, capturedAt: new Date().toISOString() };
@@ -57,8 +66,10 @@ export function captureDelivery(root: string, mode: Delivery['mode']): Delivery 
 export function verifyDelivery(delivery: Delivery): void {
   for (const item of delivery.files) {
     if (digest(readDocument(delivery.workspace, item.path)) !== item.sha256) throw new TaskGraphError('E_REVIEW_CHANGED', `Reviewed source changed: ${item.path}; report blocked`);
+    if (item.mode !== undefined && (lstatSync(path.join(delivery.workspace, item.path)).mode & 0o777) !== item.mode) throw new TaskGraphError('E_REVIEW_CHANGED', `Reviewed source permissions changed: ${item.path}; report blocked`);
   }
-  if (delivery.mode === 'live' && JSON.stringify(delivery.files) !== JSON.stringify(entries(delivery.sourceRoot))) {
+  const recorded = delivery.files.map(f => [f.path, f.sha256]);
+  if (delivery.mode === 'live' && JSON.stringify(recorded) !== JSON.stringify(entries(delivery.sourceRoot).map(f => [f.path, f.sha256]))) {
     throw new TaskGraphError('E_REVIEW_CHANGED', 'Live environment source files changed; report blocked and coordinate the environment');
   }
 }

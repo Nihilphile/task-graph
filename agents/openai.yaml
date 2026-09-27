@@ -39,10 +39,11 @@ triggers:
 permissions:
   write:
     - .task-graph/
-  network: github-opt-in
+  network: github-and-review-opt-in
 capabilities:
-  starts_agents: false
-  detects_agent_failure: false
+  starts_agents: true
+  detects_agent_failure: true
   releases_stale_claims: false
   retries_or_reschedules: false
   edits_markdown_body: true
+  agent_management_scope: explicitly-enabled-task-review

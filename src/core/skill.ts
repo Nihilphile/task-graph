@@ -21,7 +21,7 @@ export interface SkillValidationOptions {
  * The documented command table must match the registered commands exactly, so
  * the skill can never advertise a command that does not exist nor hide one that
  * does. Metadata in agents/openai.yaml must agree with SKILL.md and must keep
- * the non-responsibilities (no agent management) switched off.
+ * the supported review execution and remaining non-responsibilities explicit.
  */
 export function validateSkillPackage(options: SkillValidationOptions): SkillValidationIssue[] {
   const issues: SkillValidationIssue[] = [];
@@ -167,7 +167,7 @@ function inspectAgentMetadata(
     issues.push({
       code: 'E_SKILL_AGENT_CAPABILITIES',
       file,
-      message: 'agents/openai.yaml must state the non-responsibilities under "capabilities"',
+      message: 'agents/openai.yaml must state review capabilities and non-responsibilities',
     });
   } else {
     for (const key of [
@@ -176,11 +176,11 @@ function inspectAgentMetadata(
       'releases_stale_claims',
       'retries_or_reschedules',
     ]) {
-      if (capabilities[key] !== false) {
+      if (capabilities[key] !== (key === 'starts_agents' || key === 'detects_agent_failure')) {
         issues.push({
           code: 'E_SKILL_AGENT_CAPABILITIES',
           file,
-          message: `agents/openai.yaml capabilities.${key} must be false`,
+          message: `agents/openai.yaml capabilities.${key} must be ${key === 'starts_agents' || key === 'detects_agent_failure'}`,
         });
       }
     }

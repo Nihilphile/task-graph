@@ -53,11 +53,12 @@ export function configureGraphReview(root: string, graph: string, recursive: boo
     const state = readReviewState(root);
     for (const task of loadTaskRepository(root).tasks.filter(t => graphs.has(t.graph))) {
       if (state.tasks[task.id]?.disabled === true) { results.push({ task: task.id, result: 'explicitly_disabled' }); continue; }
-      if (state.tasks[task.id]?.enabled) { results.push({ task: task.id, result: 'already_enabled' }); continue; }
-      if (task.status === 'cancelled' || task.status === 'pending_review') { results.push({ task: task.id, result: 'skipped', reason: task.status }); continue; }
+      if (task.status === 'cancelled') { results.push({ task: task.id, result: 'skipped', reason: task.status }); continue; }
       if (!task.outputs.some(o => o.kind === 'review-requirement')) { results.push({ task: task.id, result: 'missing_rr' }); continue; }
       try { requireReviewRequirements(root, task); }
       catch (e) { results.push({ task: task.id, result: 'invalid_rr', reason: String(e) }); continue; }
+      if (state.tasks[task.id]?.enabled) { results.push({ task: task.id, result: 'already_enabled' }); continue; }
+      if (task.status === 'pending_review') { results.push({ task: task.id, result: 'skipped', reason: task.status }); continue; }
       state.tasks[task.id] = { ...state.tasks[task.id], enabled: true, config: { ...state.tasks[task.id]?.config, ...config } };
       results.push({ task: task.id, result: 'enabled' });
     }
@@ -183,11 +184,28 @@ export function updateRun(root: string, id: string, change: (run: ReviewRun, sta
 }
 export function recoverReviews(root: string, taskId?: string): string[] {
   const recovered: string[] = [];
-  for (const run of readReviewState(root).runs.filter(r => r.state === 'running' && (!taskId || r.task === taskId))) {
-    if (!processAlive(run.workerPid)) {
-      failReview(root, run.task, run.id, processAlive(run.childPid) ? 'Review supervisor exited; child may still be alive. Inspect before restart.' : 'Review process exited without review finish; use task[].review restart');
+  const ledger = readReviewState(root);
+  for (const candidate of ledger.runs.filter(r => currentReview(ledger, r.task)?.id === r.id && (!taskId || r.task === taskId))) {
+    const observed = getTask(root, candidate.task);
+    const began = observed.history.some(h => ['review_started', 'review_restarted'].includes(h.event) && h.extra['review_id'] === candidate.id);
+    const ended = observed.history.some(h => ['completed', 'rejected', 'review_blocked'].includes(h.event) && h.extra['review_id'] === candidate.id);
+    if ((began || !['queued', 'running'].includes(candidate.state)) && (ended || !['pass', 'reject', 'blocked'].includes(candidate.state)) && (candidate.state !== 'running' || processAlive(candidate.workerPid))) continue;
+    // The observation above is only a hint. Re-read ledger AND task under one lock: a concurrent
+    // finish may be between its ledger and task writes when the supervisor first observes it.
+    mutateTaskDocument(root, candidate.task, (task, tx) => {
+      const state = readReviewState(root), run = currentReview(state, task.id);
+      if (!run || run.id !== candidate.id) return task;
+      const started = task.history.some(h => ['review_started', 'review_restarted'].includes(h.event) && h.extra['review_id'] === run.id);
+      const result = task.history.some(h => ['completed', 'rejected', 'review_blocked'].includes(h.event) && h.extra['review_id'] === run.id);
+      let error: string | undefined;
+      if (!started && ['queued', 'running'].includes(run.state)) error = 'Submission interrupted before task history committed. Inspect task status, then submit/start again.';
+      else if (['pass', 'reject', 'blocked'].includes(run.state) && !result && task.status === 'pending_review') error = 'Result transaction interrupted: matching task history missing. Evidence retained; inspect and restart after the old process exits.';
+      else if (run.state === 'running' && !processAlive(run.workerPid) && task.status === 'pending_review') error = processAlive(run.childPid) ? 'Review supervisor exited; child may still be alive. Inspect before restart.' : 'Review process exited without review finish; use task[].review restart';
+      if (!error) return task;
+      run.state = 'failed'; run.error = error; run.finishedAt = new Date().toISOString(); writeReviewState(tx, state);
       recovered.push(run.id);
-    }
+      return { ...task, history: [...task.history, historyEntry('review_failed', run.finishedAt, 'executor', { review_id: run.id, error })] };
+    });
   }
   return recovered;
 }

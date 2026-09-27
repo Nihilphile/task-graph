@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test, type TestContext } from 'node:test';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { chmodSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { main } from '../src/cli/main.js';
 import { initializeProject } from '../src/core/init.js';
@@ -59,6 +60,8 @@ test('graph scan skips absent/broken RR and explicit off; defaults and per-task 
   assert.equal(scan.results.find((r: any) => r.task === off).result, 'explicitly_disabled');
   assert.equal((await w.cli('task[T-0001].auto-review', 'status')).review.config.model, 'custom');
   w.write('rr.md', '   ');
+  const rescanned = await w.cli('graph[G-001].auto-review', 'enable');
+  assert.equal(rescanned.results.find((r: any) => r.task === 'T-0001').result, 'invalid_rr');
   assert.notEqual((await w.cli(`task[${off}].auto-review`, 'enable')).code, 0);
   assert.notEqual((await w.cli('task[T-0001]', 'start')).code, 0);
 });
@@ -106,8 +109,12 @@ test('Git dirty and untracked delivery bytes are frozen; live source changes pre
   const w = fixture(t);
   execFileSync('git', ['init'], { cwd: w.root, stdio: 'ignore' });
   execFileSync('git', ['add', 'answer.txt'], { cwd: w.root }); w.write('answer.txt', 'dirty 42'); w.write('extra.txt', 'untracked');
+  chmodSync(path.join(w.root, 'answer.txt'), 0o755);
   startTask(w.root, { id: 'T-0001' }); completeTask(w.root, { id: 'T-0001' });
   startReview(w.root, { id: 'T-0001' }); const frozen = w.run();
+  const top = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: frozen.delivery.workspace }).toString().trim();
+  assert.equal(statSync(top).ino, statSync(frozen.delivery.workspace).ino);
+  assert.equal(statSync(path.join(frozen.delivery.workspace, 'answer.txt')).mode & 0o777, statSync(path.join(w.root, 'answer.txt')).mode & 0o777);
   assert.ok(frozen.delivery.files.some(f => f.path === 'extra.txt')); assert.equal(w.read(path.relative(w.root, path.join(frozen.delivery.workspace, 'answer.txt'))), 'dirty 42');
   failReview(w.root, 'T-0001', frozen.id, 'test failure');
   // A separate project exercises live validation without changing submission mode on restart.
@@ -147,4 +154,28 @@ test('review subprocess uses actual CLI finish; nonzero exit afterwards retains 
   startReview(w.root, { id: 'T-0001', config: { executable: path.join(w.root, 'finish.cjs') } });
   await executeReview(w.root, w.run().id);
   assert.equal(w.run().state, 'pass'); assert.equal(w.task().status, 'done'); assert.equal(w.run().exitCode, 3);
+});
+
+test('interrupted result transaction becomes a recoverable failure rather than a false pass', t => {
+  const w = fixture(t); configureReview(w.root, 'T-0001', true, {});
+  startTask(w.root, { id: 'T-0001' }); completeTask(w.root, { id: 'T-0001' }); w.running();
+  const pending = w.read('.task-graph/tasks/T-0001.md');
+  w.write(w.run().reportPath, '# pass\nverified');
+  finishReview(w.root, { id: 'T-0001', reviewId: w.run().id, result: 'pass', report: w.run().reportPath });
+  w.write('.task-graph/tasks/T-0001.md', pending); // simulate interruption before task history persisted
+  recoverReviews(w.root);
+  assert.equal(w.task().status, 'pending_review'); assert.equal(w.run().state, 'failed'); assert.ok(w.run().report);
+  restartReview(w.root, 'T-0001'); assert.equal(w.run().state, 'queued');
+});
+
+test('different tasks execute concurrently while duplicate execution of one round is ignored', async t => {
+  const w = fixture(t), signal = path.join(w.root, '.task-graph/started.txt');
+  w.write('concurrent.cjs', `const fs=require('fs');process.stdin.resume();process.stdin.on('end',()=>{fs.appendFileSync(${JSON.stringify(signal)},'started\\n');let n=0;const timer=setInterval(()=>{if(fs.readFileSync(${JSON.stringify(signal)},'utf8').trim().split('\\n').length===2){clearInterval(timer);process.exit(0);}if(n++>150){clearInterval(timer);process.exit(4);}},50);});`);
+  const other = (await w.cli('task', 'add', '--summary', 'Concurrent')).task.id;
+  attachDocument(w.root, { id: other, path: 'rr.md', kind: 'review-requirement' });
+  for (const id of ['T-0001', other]) { startTask(w.root, { id }); completeTask(w.root, { id }); startReview(w.root, { id, config: { executable: path.join(w.root, 'concurrent.cjs') } }); }
+  const second = currentReview(readReviewState(w.root), other)!;
+  await Promise.all([executeReview(w.root, w.run().id), executeReview(w.root, second.id), executeReview(w.root, w.run().id)]);
+  assert.equal(w.run().exitCode, 0); assert.equal(currentReview(readReviewState(w.root), other)!.exitCode, 0);
+  assert.equal(w.read('.task-graph/started.txt').trim().split('\n').length, 2);
 });

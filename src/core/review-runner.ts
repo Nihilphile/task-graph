@@ -101,6 +101,9 @@ export async function executeReview(root: string, reviewId: string): Promise<voi
   });
   if (!run) return;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let unrecordedChild: ReturnType<typeof spawn> | undefined;
+  mkdirSync(path.dirname(path.resolve(root, run.log)), { recursive: true });
+  appendFileSync(path.resolve(root, run.log), '');
   try {
     buildProject(root);
     verifyDelivery(run.delivery);
@@ -112,7 +115,12 @@ export async function executeReview(root: string, reviewId: string): Promise<voi
       '--output-last-message', last, '-'];
     const env = { ...process.env }; delete env['CODEX_THREAD_ID']; delete env['CODEX_SESSION_ID'];
     const child = spawn(command, args, { cwd: run.delivery.workspace, env, windowsHide: true, shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
+    unrecordedChild = child;
+    const completion = new Promise<number | null>((resolve, reject) => { child.on('error', reject); child.on('close', resolve); });
+    // Register immediately so even an early spawn error always has a handler.
+    void completion.catch(() => {});
     updateRun(root, run.id, r => { r.childPid = child.pid; });
+    unrecordedChild = undefined;
     const log = path.resolve(root, run.log), stderr = path.resolve(root, `.task-graph/reviews/${run.id}/stderr.log`);
     mkdirSync(path.dirname(log), { recursive: true });
     let logBytes = 0, pending = '', sessionSaved = false;
@@ -133,14 +141,19 @@ export async function executeReview(root: string, reviewId: string): Promise<voi
     child.stdin.on('error', () => { /* close/error determines whether a result was committed */ });
     timer = setTimeout(() => { try { timeoutWarning(root, run!); } catch { /* persistent state still visible */ } }, Math.min(run.config.timeoutMinutes * 60000, 2147483647));
     child.stdin.end(readFileSync(path.resolve(root, run.prompt)));
-    const code = await new Promise<number | null>((resolve, reject) => { child.on('error', reject); child.on('close', resolve); });
+    const code = await completion;
     updateRun(root, run.id, r => { r.exitCode = code; r.childPid = undefined; r.workerPid = undefined; if (code !== 0 && ['pass', 'reject', 'blocked'].includes(r.state)) r.error = `Process exited ${code} after committing its result`; });
     failReview(root, run.task, run.id, `Review process exited (${code}) without review finish; inspect ${run.log}, then use task[${run.task}].review restart`);
   } catch (e) {
+    // No prompt has been sent before PID persistence. Avoid leaving a stdin-waiting orphan
+    // if recording the newly spawned process fails (for example, a project lock timeout).
+    if (unrecordedChild) { unrecordedChild.stdin?.destroy(); unrecordedChild.kill(); }
+    appendFileSync(path.resolve(root, run.log), JSON.stringify({ type: 'executor.error', message: String(e) }) + '\n');
     failReview(root, run.task, run.id, String(e));
   } finally {
     if (timer) clearTimeout(timer);
     updateRun(root, run.id, r => { r.workerPid = undefined; });
+    buildProject(root);
     kickWatchWorker(root);
   }
 }

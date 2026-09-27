@@ -7,6 +7,8 @@ import { runProjectTransaction, type ProjectTransaction } from './transaction.js
 import { assertRepositoryValid } from './validate.js';
 import { assertPlanMutable } from './refinement.js';
 import { recordWatchResult } from './watch.js';
+import { readReviewState } from './review-state.js';
+import { requireReviewRequirements } from './review.js';
 
 /** Actor plus injectable clock shared by every structured task command. */
 export interface ClockOptions {
@@ -44,6 +46,7 @@ export function mutateTaskDocument(
       const next = mutate(current, transaction);
       assertPlanMutable(current, next);
       const rr = (t: TaskDocument) => t.outputs.filter(o => o.kind === 'review-requirement');
+      if (readReviewState(root).tasks[current.id]?.enabled && JSON.stringify(rr(current)) !== JSON.stringify(rr(next))) requireReviewRequirements(root, next);
       if (current.status === 'pending_review' && (JSON.stringify(rr(current)) !== JSON.stringify(rr(next)) || current.content !== next.content || current.body !== next.body || JSON.stringify(current.outputs.filter(o => o.kind === 'content')) !== JSON.stringify(next.outputs.filter(o => o.kind === 'content')))) throw new TaskGraphError('E_REVIEW_ACTIVE', 'Requirements are fixed during review');
       if (next.history.length !== current.history.length && ['review_failed', 'review_warning', 'review_blocked'].includes(next.history.at(-1)!.event)) recordWatchResult(root, next, transaction, next.history.at(-1)!.event === 'review_blocked' ? 'blocked' : 'warning');
       if (current.status !== next.status && (next.status === 'done' || next.status === 'reject')) recordWatchResult(root, next, transaction);
