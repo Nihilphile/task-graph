@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { documentMetadata, documentPath, documentView, type DocumentView, type DocumentKind } from './documents.js';
 import { loadTaskRepository, type TaskRepository } from './repo.js';
-import type { TaskDocument, TaskOutput } from './task.js';
+import { contentBindings, type TaskDocument, type TaskOutput } from './task.js';
 
 export interface ContextFile {
   readonly path: string;
@@ -26,6 +26,7 @@ export interface ContextReference extends ContextFile {
 export interface TaskContext {
   readonly project_root: string;
   readonly content: ContextFile;
+  readonly contents: readonly ContextFile[];
   readonly references: readonly ContextReference[];
   readonly handoffs: readonly ContextFile[];
   readonly reports: readonly ContextFile[];
@@ -74,6 +75,7 @@ export function taskContext(root: string, task: TaskDocument, repository = loadT
   const entries: (ContextFile & { source_task: string; scope: 'self' | 'dependency' })[] = [];
   for (const binding of attachmentBindings(task, repository)) {
     const o = binding.output;
+    if (o.kind === 'content') continue;
     if (binding.scope === 'dependency' && (o.kind === 'log' || o.kind === 'handoff')) continue;
     // Old generated handoffs can contain copies of unrelated attachments; require review before reuse.
     const reason = o.audience === 'user' ? 'audience_user' : pathExcluded(o) ? 'excluded_path'
@@ -81,18 +83,22 @@ export function taskContext(root: string, task: TaskDocument, repository = loadT
     if (reason) { excluded.push({ source_task: binding.task.id, kind: o.kind ?? 'output', path: o.path, reason }); continue; }
     entries.push({ ...filePointer(root, o), source_task: binding.task.id, scope: binding.scope });
   }
-  const contentPath = task.content ?? `.task-graph/tasks/${task.id}.md`;
-  const contentExcluded = paths.has(key(contentPath));
-  const content: ContextFile = contentExcluded
-    ? { path: contentPath, read_path: contentPath, title: task.title, mode: 'live', kind: 'content', excluded: 'excluded_path' }
-    : { ...filePointer(root, { path: contentPath, title: task.title, summary: task.summary ?? task.title }), kind: 'content', source_task: task.id, scope: 'self' };
+  const contents: ContextFile[] = contentBindings(task).map(o => {
+    if (pathExcluded(o)) {
+      excluded.push({ source_task: task.id, kind: 'content', path: o.path, reason: 'excluded_path' });
+      return { path: o.path, read_path: o.snapshot ?? o.path, title: o.title ?? task.title, mode: 'live', kind: 'content', excluded: 'excluded_path' };
+    }
+    return { ...filePointer(root, o), kind: 'content', source_task: task.id, scope: 'self' };
+  });
+  const content = contents[0]!;
+  const contentExcluded = paths.has(key(`.task-graph/tasks/${task.id}.md`));
   const logs = entries.filter(o => o.kind === 'log');
   if (/^##[ \t]+工作记录[ \t]*\r?\n\s*\S/m.test(task.body) && !contentExcluded) {
     logs.push({ ...filePointer(root, { path: `.task-graph/tasks/${task.id}.md`, title: '任务正文中的工作记录' }), kind: 'log', source_task: task.id, scope: 'self', section: 'work_log' });
   }
   return {
     project_root: path.resolve(root),
-    content,
+    content, contents,
     references: entries.filter(o => o.kind === 'reference'),
     handoffs: entries.filter(o => o.kind === 'handoff'),
     reports: entries.filter(o => o.kind === 'report'),
@@ -101,7 +107,7 @@ export function taskContext(root: string, task: TaskDocument, repository = loadT
 }
 
 export function contextFiles(context: TaskContext): readonly ContextFile[] {
-  return [context.content, ...context.references, ...context.reports, ...context.logs, ...context.handoffs, ...context.outputs].filter(o => !o.excluded);
+  return [...context.contents, ...context.references, ...context.reports, ...context.logs, ...context.handoffs, ...context.outputs].filter(o => !o.excluded);
 }
 
 export function referenceDocuments(root: string, task: TaskDocument, repository = loadTaskRepository(root)): DocumentView[] {
@@ -115,6 +121,7 @@ export function referenceDocuments(root: string, task: TaskDocument, repository 
 export function formatTaskContext(context: TaskContext, options: { portable?: boolean } = {}): string {
   const lines = ['## 接手文件索引', options.portable ? '以下路径均相对于项目根目录。' : `项目根目录：${context.project_root}`, `任务要求：${context.content.read_path}`];
   if (context.content.error) lines.push(`要求文件错误：${context.content.error}`);
+  for (const file of context.contents.slice(1)) lines.push(`任务要求：${file.read_path}${file.summary ? ' · ' + file.summary : ''}${file.error ? ' · ' + file.error : ''}${file.excluded ? ' · 已排除' : ''}`);
   for (const entry of context.references) {
     lines.push(`- ${entry.scope === 'self' ? '本任务' : '依赖'} ${entry.source_task} · ${entry.title}：${entry.read_path} (${entry.mode})${entry.summary ? '\n  ' + entry.summary : ''}${entry.error ? '\n  错误：' + entry.error : ''}`);
   }

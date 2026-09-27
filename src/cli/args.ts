@@ -8,6 +8,9 @@ import { usageError } from '../core/errors.js';
 const BOOLEAN_OPTIONS: ReadonlySet<string> = new Set([
   'all',
   'available',
+  'flush',
+  'allow-duplicate',
+  'needs-refinement',
   'handoff',
   'manifest',
   'preview',

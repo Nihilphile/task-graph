@@ -52,6 +52,7 @@ export function addTaskOutput(root: string, options: OutputOptions): TaskDocumen
 export function removeTaskOutput(root: string, options: OutputOptions): TaskDocument {
   const outputPath = normalizeOutputPath(options.path);
   return mutateTaskDocument(root, options.id, (current) => {
+    if (current.outputs.some(o => o.path === outputPath && o.kind === 'content')) throw new TaskGraphError('E_CONTENT_REMOVE', 'Use task content remove to preserve at least one requirements file');
     if (!current.outputs.some((output) => output.path === outputPath)) {
       throw new TaskGraphError('E_NO_OUTPUT', `Task "${current.id}" does not list "${outputPath}"`);
     }

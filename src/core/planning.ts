@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { TaskGraphError } from './errors.js';
 import { buildProject } from './build.js';
 import { nextGraphId } from './graphs.js';
-import { requireContent } from './documents.js';
+import { requireContent, withDocument } from './documents.js';
 import { readProjectManifest, serializeProjectManifest } from './project.js';
 import { loadTaskRepository, formatTaskId, taskIdNumber } from './repo.js';
 import { createTaskDocument, historyEntry, serializeTaskDocument, type TaskDocument, type TaskDependency } from './task.js';
@@ -89,13 +89,16 @@ export function addPlannedTasks(root: string, inputs: readonly PlannedTask[]): {
       const compact = input.summary !== undefined || content !== undefined;
       const document = createTaskDocument({ id, graph, title, goal: input.goal, completionConditions: input.completionConditions, workLog: input.workLog });
       const dependencies = [...(input.dependsOn ?? []), ...parseDependencySpecs(input.dependsOnSpecs ?? [])].map((dep) => ({ ...dep, task: resolveId(dep.task) }));
-      const created: TaskDocument = { ...document,
+      let created: TaskDocument = { ...document,
+        ...(input.planning ? { planning: input.planning } : {}),
+        ...(input.kind ? { kind: input.kind } : {}),
         ...(compact ? { summary: title, body: input.goal !== undefined || input.completionConditions?.length || input.workLog?.length ? document.body : `# ${title}\n` } : {}),
         ...(content ? { content } : {}),
         ...(input.key ? { key: input.key.trim(), creationFingerprint: fingerprints.get(id)! } : {}),
         dependsOn: dependencies, manualBlockers: [...(input.manualBlockers ?? [])], derivedFrom: [...(input.derivedFrom ?? [])],
         history: [historyEntry('created', timestampOf(input.now), input.actor ?? null, { graph })],
       };
+      for (const file of input.contentFiles ?? []) created = withDocument(root, created, transaction, { ...input, id, path: file, kind: 'content' });
       tasks.set(id, created);
       dirty.add(id);
       placing.delete(id);
@@ -136,7 +139,7 @@ export function readTaskPlan(file: string): PlannedTask[] {
   const defaultGraph = optionalString(object['graph'], 'plan.graph');
   return object['tasks'].map((raw, index) => {
     const task = record(raw, `tasks[${index}]`);
-    const allowed = ['key', 'summary', 'title', 'content', 'graph', 'parent_task', 'depends_on', 'manual_blockers', 'derived_from', 'completion_requires', 'exposes'];
+    const allowed = ['key', 'summary', 'title', 'content', 'planning', 'kind', 'graph', 'parent_task', 'depends_on', 'manual_blockers', 'derived_from', 'completion_requires', 'exposes'];
     for (const field of Object.keys(task)) if (!allowed.includes(field)) throw new TaskGraphError('E_PLAN', `Unknown tasks[${index}] field "${field}"`);
     const parentTask = optionalString(task['parent_task'], 'parent_task');
     const dependencies = task['depends_on'] ?? [];
@@ -154,7 +157,9 @@ export function readTaskPlan(file: string): PlannedTask[] {
     const exposed = task['exposes'] === undefined ? undefined : record(task['exposes'], 'exposes');
     return {
       key: optionalString(task['key'], 'key'), summary: optionalString(task['summary'], 'summary'), title: optionalString(task['title'], 'title'),
-      content: optionalString(task['content'], 'content'), graph: optionalString(task['graph'], 'graph') ?? (parentTask ? undefined : defaultGraph), parentTask, dependsOn,
+      planning: choice(task['planning'], ['static', 'dynamic'] as const, 'planning'),
+      kind: choice(task['kind'], ['work', 'acceptance', 'decision'] as const, 'kind'),
+      ...planContents(task['content']), graph: optionalString(task['graph'], 'graph') ?? (parentTask ? undefined : defaultGraph), parentTask, dependsOn,
       manualBlockers: strings(task['manual_blockers'] ?? [], 'manual_blockers'), derivedFrom: strings(task['derived_from'] ?? [], 'derived_from'),
       ...(task['completion_requires'] === undefined ? {} : { completionRequires: strings(task['completion_requires'], 'completion_requires') }),
       ...(exposed === undefined ? {} : { exposes: Object.fromEntries(Object.entries(exposed).map(([name, value]) => [name, strings(Array.isArray(value) ? value : record(value, name)['requires'], `exposes.${name}.requires`)])) }),
@@ -165,6 +170,17 @@ export function readTaskPlan(file: string): PlannedTask[] {
 function record(value: unknown, field: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TaskGraphError('E_PLAN', `${field} must be an object`);
   return value as Record<string, unknown>;
+}
+export function choice<T extends string>(value: unknown, choices: readonly T[], field: string): T | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !choices.includes(value as T)) throw new TaskGraphError('E_PLAN', `${field} must be ${choices.join('|')}`);
+  return value as T;
+}
+function planContents(value: unknown): { content?: string; contentFiles?: readonly string[] } {
+  if (!Array.isArray(value)) return { content: optionalString(value, 'content') };
+  const files = strings(value, 'content');
+  if (!files.length) throw new TaskGraphError('E_PLAN', 'content must contain at least one file');
+  return { content: files[0]!, ...(files.length > 1 ? { contentFiles: files.slice(1) } : {}) };
 }
 function optionalString(value: unknown, field: string): string | undefined {
   if (value === undefined) return undefined;

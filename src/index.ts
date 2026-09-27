@@ -36,3 +36,6 @@ export * from './core/planning.js';
 export * from './core/composites.js';
 export * from './core/sources.js';
 export * from './core/skill.js';
+export * from './core/refinement.js';
+export * from './core/watch.js';
+export * from './core/desktop-notify.js';

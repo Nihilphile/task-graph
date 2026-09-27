@@ -2,6 +2,7 @@ dist/
 node_modules/
 *.tsbuildinfo
 .task-graph/generated/
+.task-graph/watch.json
 npm-debug.log*
 .playwright-cli/
 output/

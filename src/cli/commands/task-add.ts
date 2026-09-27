@@ -3,7 +3,7 @@ import { usageError } from '../../core/errors.js';
 import { addTask } from '../../core/taskops.js';
 import { resolveCwd } from '../paths.js';
 import path from 'node:path';
-import { addPlannedTasks, readTaskPlan } from '../../core/planning.js';
+import { addPlannedTasks, readTaskPlan, choice } from '../../core/planning.js';
 import { computeReadiness } from '../../core/readiness.js';
 import { loadTaskRepository } from '../../core/repo.js';
 
@@ -12,9 +12,11 @@ export function taskAddCommand(): CommandSpec {
     name: 'task add',
     summary: 'Create tasks with content bindings and dependency arrays, individually or from a JSON plan',
     usage:
-      'task-graph task add (--summary <text> [--content <path>] | --from <plan.json>) [--graph G-NNN | --parent-task T-NNNN] [--depends-on T-NNNN[:gate]]... [--key <key>] [--actor <name>] [--cwd <dir>] [--json]',
+      'task-graph task add (--summary <text> [--content <path>]... | --from <plan.json>) [--planning static|dynamic] [--kind work|acceptance|decision] [--graph G-NNN | --parent-task T-NNNN] [--depends-on T-NNNN[:gate]]... [--key <key>] [--actor <name>] [--cwd <dir>] [--json]',
     details: [
       'Content is a project-relative Markdown/text file, shared by the controller, worker and viewer.',
+      'Repeat --content, or use a content array in JSON. All current content files jointly define the requirements.',
+      'Dynamic tasks start as skeletons; task refine is required after dependencies finish. Static remains the default.',
       '--from accepts a JSON plan with tasks[], stable keys and @key dependency/parent references; the whole batch is atomic.',
       '--parent-task creates/reuses its child graph and adds the new task to its completion targets.',
       'Legacy --title, --goal, --condition, --work-log, --blocker and --derived-from remain supported.',
@@ -24,10 +26,14 @@ export function taskAddCommand(): CommandSpec {
     run(ctx: CliContext, args): number {
       const root = resolveCwd(ctx, args);
       if (args.opt('from') !== undefined) {
-        for (const option of ['summary', 'title', 'content', 'parent-task', 'depends-on', 'key', 'goal', 'condition', 'work-log', 'blocker', 'derived-from']) {
+        for (const option of ['summary', 'title', 'content', 'planning', 'kind', 'parent-task', 'depends-on', 'key', 'goal', 'condition', 'work-log', 'blocker', 'derived-from']) {
           if (args.has(option)) throw usageError(`Put --${option} inside the plan when using --from.`);
         }
-        const inputs = readTaskPlan(path.resolve(ctx.cwd, args.opt('from')!)).map((input) => ({ ...input, graph: input.graph ?? (input.parentTask ? undefined : args.opt('graph')), actor: args.opt('actor'), now: () => ctx.now() }));
+        const plan = readTaskPlan(path.resolve(ctx.cwd, args.opt('from')!));
+        if (ctx.scopedGraph && plan.some(input => input.parentTask || (input.graph && input.graph !== ctx.scopedGraph))) {
+          throw usageError('Every task in this plan must belong to the addressed graph. Use task add --from for a plan spanning graphs or parent tasks.');
+        }
+        const inputs = plan.map((input) => ({ ...input, graph: input.graph ?? (input.parentTask ? undefined : args.opt('graph')), actor: args.opt('actor'), now: () => ctx.now() }));
         const result = addPlannedTasks(root, inputs);
         const states = computeReadiness(loadTaskRepository(root));
         const tasks = result.tasks.map((task) => ({ id: task.id, graph: task.graph, summary: task.title, content: task.content ?? null, file: `.task-graph/tasks/${task.id}.md`, ...states.get(task.id) }));
@@ -45,6 +51,9 @@ export function taskAddCommand(): CommandSpec {
         title,
         summary,
         content: args.opt('content'),
+        planning: choice(args.opt('planning'), ['static', 'dynamic'] as const, 'planning'),
+        kind: choice(args.opt('kind'), ['work', 'acceptance', 'decision'] as const, 'kind'),
+        ...(args.all('content').length > 1 ? { contentFiles: args.all('content').slice(1) } : {}),
         parentTask: args.opt('parent-task'),
         key: args.opt('key'),
         goal: args.opt('goal'),

@@ -1,5 +1,6 @@
 import type { TaskRepository } from './repo.js';
 import type { TaskDocument, TaskStatus } from './task.js';
+import { planningState } from './refinement.js';
 
 /**
  * Computed readiness of one task.
@@ -11,6 +12,7 @@ export type Readiness = 'ready' | 'blocked';
 
 /** One reason a task is not ready to start. */
 export type BlockedReason =
+  | { readonly kind: 'refinement'; readonly state: string }
   | { readonly kind: 'task'; readonly task: string }
   | {
       readonly kind: 'gate';
@@ -22,6 +24,7 @@ export type BlockedReason =
   | { readonly kind: 'manual'; readonly text: string };
 
 export interface TaskReadiness {
+  readonly planningState?: ReturnType<typeof planningState>;
   readonly readiness: Readiness;
   readonly blockedBy: readonly BlockedReason[];
 }
@@ -40,7 +43,13 @@ export function computeReadiness(
   for (const task of repository.tasks) byId.set(task.id, task);
 
   const result = new Map<string, TaskReadiness>();
-  for (const task of repository.tasks) result.set(task.id, readinessFor(task, byId));
+  for (const task of repository.tasks) {
+    const state = readinessFor(task, byId);
+    if (task.planning !== 'dynamic') { result.set(task.id, state); continue; }
+    const plan = planningState(task, repository);
+    const blockedBy: BlockedReason[] = [...state.blockedBy, ...(plan === 'refined' || task.status === 'done' || task.status === 'cancelled' ? [] : [{ kind: 'refinement' as const, state: plan }])];
+    result.set(task.id, { readiness: blockedBy.length ? 'blocked' : 'ready', blockedBy, planningState: plan });
+  }
   return result;
 }
 
@@ -91,6 +100,7 @@ export function describeReadiness(readiness: TaskReadiness): string {
 }
 
 function describeBlockedReason(reason: BlockedReason): string {
+  if (reason.kind === 'refinement') return `controller refinement required (${reason.state}); use task refine`;
   if (reason.kind === 'manual') return `manual blocker "${reason.text}"`;
   if (reason.kind === 'task') return `unmet dependency ${reason.task}`;
   const members = reason.tasks.length === 0 ? 'no listed tasks' : reason.tasks.join(', ');

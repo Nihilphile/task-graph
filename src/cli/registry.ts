@@ -17,6 +17,8 @@ import { skillValidateCommand } from './commands/skill-validate.js';
 import { taskAnnotationCommands } from './commands/task-annotations.js';
 import { taskInspectCommands } from './commands/task-inspect.js';
 import { taskDocumentCommands } from './commands/task-documents.js';
+import { taskRefineCommands } from './commands/task-refine.js';
+import { graphWatchCommands } from './commands/graph-watch.js';
 
 /**
  * The command table. `help` is created first so it can describe every other
@@ -27,12 +29,14 @@ export function createRegistry(): readonly CommandSpec[] {
   commands.push(
     initCommand(),
     graphAddCommand(),
+    ...graphWatchCommands(),
     ...githubCommands(),
     taskAddCommand(),
     taskReviseCommand(),
     ...taskAnnotationCommands(),
     ...taskInspectCommands(),
     ...taskDocumentCommands(),
+    ...taskRefineCommands(),
     ...taskStatusCommands(),
     ...taskClaimCommands(),
     ...taskLinkCommands(),

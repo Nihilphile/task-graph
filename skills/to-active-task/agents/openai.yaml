@@ -1,0 +1,7 @@
+interface:
+  display_name: "To Active Task"
+  short_description: "根据信息充分程度选择推进或探索，用任务图记录判断并随实际交付调整计划"
+  default_prompt: "使用 $to-active-task 根据当前认知组织工作，选择值得推进或探索的事项，并维护任务图。"
+
+policy:
+  allow_implicit_invocation: false

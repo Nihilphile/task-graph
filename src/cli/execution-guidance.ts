@@ -11,7 +11,7 @@ export function executionGuidance() {
   return {
     skill: 'task-take',
     skill_path: skillPath,
-    message: '请阅读 task-take skill；读取任务要求和必要 reference，写接手工作记录后直接施工，无须主控二次许可。缺口记入日志，无法继续时标记阻塞；完工前登记后继所需 reference。',
+    message: '请阅读 task-take skill；动态任务须先由主控 refine。读取全部 context.contents 和必要 reference，写接手工作记录后直接施工，无须主控二次许可。缺口记入日志，无法继续时标记阻塞；完工前登记后继所需 reference。验收任务提交明确 pass/reject 及报告。',
   };
 }
 

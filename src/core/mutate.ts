@@ -5,6 +5,8 @@ import { serializeTaskDocument, type TaskDocument } from './task.js';
 import { toIsoTimestamp } from './time.js';
 import { runProjectTransaction, type ProjectTransaction } from './transaction.js';
 import { assertRepositoryValid } from './validate.js';
+import { assertPlanMutable } from './refinement.js';
+import { recordWatchResult } from './watch.js';
 
 /** Actor plus injectable clock shared by every structured task command. */
 export interface ClockOptions {
@@ -40,6 +42,8 @@ export function mutateTaskDocument(
         throw new TaskGraphError('E_NO_TASK', `Task "${id}" was not found`);
       }
       const next = mutate(current, transaction);
+      assertPlanMutable(current, next);
+      if (current.status !== next.status && (next.status === 'done' || next.status === 'reject')) recordWatchResult(root, next, transaction);
       transaction.write(
         `.task-graph/tasks/${current.id}.md`,
         serializeTaskDocument(next),

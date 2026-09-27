@@ -3,6 +3,7 @@ import path from 'node:path';
 import { readDocument } from './documents.js';
 import { loadTaskRepository, type TaskRepository } from './repo.js';
 import { computeReadiness } from './readiness.js';
+import { contentBindings } from './task.js';
 
 export const digest = (text: string): string => createHash('sha256').update(text).digest('hex');
 export interface GitHubTarget { repo: string; container: string }
@@ -57,7 +58,7 @@ export function planGitHub(root: string): GitHubPlan {
     if (!target) continue;
     const dependencies = task.dependsOn.flatMap(dep => dep.mode === 'full' ? [dep.task]
       : repository.taskById(dep.task)?.subgraph?.exposes.find(g => g.name === dep.gate)?.requires ?? []);
-    const content = task.content ? readDocument(root, task.content).toString('utf8') : task.body;
+    const content = contentBindings(task).map(o => o.path === `.task-graph/tasks/${task.id}.md` ? task.body : readDocument(root, o.path).toString('utf8')).join('\n\n---\n\n');
     let body = `# ${task.title}\n\nGraph: ${task.graph}\nStatus: ${task.status}\nReadiness: ${readiness.get(task.id)?.readiness ?? 'ready'}\nClaim: ${task.claim ? `${task.claim.role} / ${task.claim.sessionId}` : '—'}\n\n`;
     body += `Depends on: ${task.dependsOn.map(d => d.task + (d.gate ? ':' + d.gate : '')).join(', ') || '—'}\n`;
     body += `Manual blockers: ${task.manualBlockers.join('; ') || '—'}\n\n`;
@@ -80,7 +81,7 @@ export function planGitHub(root: string): GitHubPlan {
       }
     });
     for (const output of task.outputs) {
-      if (!output.kind || output.kind === 'reference') continue; // References publish an index, not source file contents.
+      if (!output.kind || output.kind === 'reference' || output.kind === 'content') continue; // Requirements already appear in the issue body.
       if (output.kind === 'log' && output.path === `.task-graph/logs/${task.id}.md`) continue;
       const bytes = readDocument(root, output.snapshot ?? output.path);
       const hash = createHash('sha256').update(bytes).digest('hex');

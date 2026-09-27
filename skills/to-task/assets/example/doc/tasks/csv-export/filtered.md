@@ -6,7 +6,7 @@
 
 ## 输入与约束
 
-以列表已有筛选语义为准，复用读取路径与权限检查。下载开始时固定筛选条件，之后界面改变不混入同一次导出。通过 task show --handoff 查看前置任务产物和已知限制。
+以列表已有筛选语义为准，复用读取路径与权限检查。下载开始时固定筛选条件，之后界面改变不混入同一次导出。通过 `'task[<本任务ID>]' show --handoff` 查看前置任务产物和已知限制。
 
 ## 完成条件与验证
 
@@ -17,4 +17,4 @@
 
 ## 交付
 
-把实现和验证结果写到 `doc/reports/csv-export/filtered.md`，通过 task complete 的 --report 参数绑定到本任务。
+把实现和验证结果写到 `doc/reports/csv-export/filtered.md`，通过 `'task[<本任务ID>]' complete --report doc/reports/csv-export/filtered.md` 绑定到本任务。

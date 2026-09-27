@@ -18,7 +18,7 @@ function listCommand(): CommandSpec {
   return {
     name: 'task list',
     summary: 'List current tasks and computed readiness',
-    usage: 'task-graph task list [--available] [--graph G-NNN] [--status todo|in_progress|done|cancelled] [--readiness ready|blocked] [--cwd <dir>] [--json]',
+    usage: 'task-graph task list [--available | --needs-refinement] [--graph G-NNN] [--status todo|in_progress|done|reject|cancelled] [--readiness ready|blocked] [--cwd <dir>] [--json]',
     details: ['Reads source files and computes readiness; generated graph.json does not need to be current.'],
     run(ctx, args): number {
       const root = resolveCwd(ctx, args);
@@ -35,7 +35,7 @@ function listCommand(): CommandSpec {
       const status = args.opt('status');
       const graph = args.opt('graph');
       const readiness = args.opt('readiness');
-      if (status && !['todo', 'in_progress', 'done', 'cancelled'].includes(status)) {
+      if (status && !['todo', 'in_progress', 'done', 'reject', 'cancelled'].includes(status)) {
         throw usageError(`Unsupported status "${status}"`);
       }
       if (readiness && !['ready', 'blocked'].includes(readiness)) {
@@ -46,6 +46,7 @@ function listCommand(): CommandSpec {
       }
       const tasks = repository.tasks.map(task => ({ ...task, ...readinessById.get(task.id)! }))
         .filter((task) => !args.flag('available') || (task.status === 'todo' && task.readiness === 'ready' && task.claim === null))
+        .filter(task => !args.flag('needs-refinement') || (['todo', 'reject'].includes(task.status) && !task.claim && ['awaiting_review', 'stale'].includes(task.planningState ?? '') && task.blockedBy.every(b => b.kind === 'refinement')))
         .filter((task) => !graph || task.graph === graph)
         .filter((task) => !status || task.status === status)
         .filter((task) => !readiness || task.readiness === readiness)
@@ -55,7 +56,7 @@ function listCommand(): CommandSpec {
           const outputs = task.outputs.filter(o => allowed.some(f => f.source_task === id && f.path === o.path && f.sha256 === o.sha256));
           const target = targets.get(graph);
           const github = target ? { ...githubView(githubState, id, target.repo), ...(githubError ? { error: githubError } : {}) } : undefined;
-          return { id, graph, title, status, readiness, blockedBy, claim, outputs, ...(github ? { github } : {}) };
+          return { id, graph, title, status, readiness, blockedBy, claim, planning: task.planning ?? 'static', planningState: task.planningState ?? 'static', kind: task.kind ?? 'work', result: status === 'done' ? 'pass' : status === 'reject' ? 'reject' : null, outputs, ...(github ? { github } : {}) };
         });
       if (args.flag('json')) ctx.io.out(JSON.stringify({ ok: true, tasks }, null, 2));
       else if (!args.flag('quiet')) {
@@ -99,11 +100,12 @@ function showCommand(): CommandSpec {
         ? result.documents.find(d => d.kind === file.kind && d.source_task === file.source_task && d.read_path === file.read_path && d.section === file.section) ?? file : file;
       const task = { id, graph: source.graph, title: source.title, summary: source.summary, contentPath: context.content.path,
         status: source.status, claim: source.claim, dependsOn: source.dependsOn, subgraph: source.subgraph,
+        planning: source.planning ?? 'static', planningState: state.planningState ?? 'static', refinement: source.refinement, kind: source.kind ?? 'work', result: source.status === 'done' ? 'pass' : source.status === 'reject' ? 'reject' : null,
         manualBlockers: source.manualBlockers, supersedes: source.supersedes, derivedFrom: source.derivedFrom,
         outputs: source.outputs.filter(o => contextFiles(context).some(f => f.source_task === id && f.path === o.path && f.sha256 === o.sha256)),
         readiness: state.readiness, blockedBy: state.blockedBy,
         ...(github ? { github } : {}),
-        documents: { content: withBody(context.content), references: context.references.map(withBody), reports: context.reports.map(withBody),
+        documents: { content: withBody(context.content), contents: context.contents.map(withBody), references: context.references.map(withBody), reports: context.reports.map(withBody),
           logs: context.logs.map(withBody), handoffs: context.handoffs.map(withBody), outputs: context.outputs.map(withBody) } };
       if (args.flag('json')) ctx.io.out(JSON.stringify({ ok: true, output_mode: args.flag('preview') ? 'preview' : expand.length || args.has('expand-path') ? 'expanded' : 'manifest',
         task, context, guidance, preview: result.preview, ...(args.flag('handoff') ? { handoff: result.text } : {}) }, null, 2));

@@ -1,0 +1,79 @@
+{
+  "tasks": [
+    {
+      "key": "dynamic.delivery",
+      "summary": "动态任务图与 Desktop 通知",
+      "content": "docs/work/dynamic-graph/delivery.md",
+      "graph": "G-004"
+    },
+    {
+      "key": "dynamic.content",
+      "summary": "多文件任务要求",
+      "content": "docs/work/dynamic-graph/content.md",
+      "parent_task": "@dynamic.delivery",
+      "depends_on": []
+    },
+    {
+      "key": "dynamic.refinement",
+      "summary": "动态细化与领取门槛",
+      "content": "docs/work/dynamic-graph/refinement.md",
+      "parent_task": "@dynamic.delivery",
+      "depends_on": [
+        "@dynamic.content"
+      ]
+    },
+    {
+      "key": "dynamic.verdict",
+      "summary": "验收 pass/reject",
+      "content": "docs/work/dynamic-graph/verdict.md",
+      "parent_task": "@dynamic.delivery",
+      "depends_on": [
+        "@dynamic.refinement"
+      ]
+    },
+    {
+      "key": "dynamic.watch",
+      "summary": "Graph watch 与 Desktop 后续轮提醒",
+      "content": "docs/work/dynamic-graph/watch.md",
+      "parent_task": "@dynamic.delivery",
+      "depends_on": [
+        "@dynamic.verdict"
+      ]
+    },
+    {
+      "key": "dynamic.active-skill",
+      "summary": "To Active Task 动态规划技能",
+      "content": "docs/work/dynamic-graph/active-skill.md",
+      "parent_task": "@dynamic.delivery",
+      "depends_on": [
+        "@dynamic.content",
+        "@dynamic.refinement",
+        "@dynamic.verdict",
+        "@dynamic.watch"
+      ]
+    },
+    {
+      "key": "dynamic.take-skill",
+      "summary": "执行技能配套与静态工作流兼容",
+      "content": "docs/work/dynamic-graph/take-skill.md",
+      "parent_task": "@dynamic.delivery",
+      "depends_on": [
+        "@dynamic.active-skill"
+      ]
+    },
+    {
+      "key": "dynamic.acceptance",
+      "summary": "独立验收",
+      "content": "docs/work/dynamic-graph/acceptance.md",
+      "parent_task": "@dynamic.delivery",
+      "depends_on": [
+        "@dynamic.content",
+        "@dynamic.refinement",
+        "@dynamic.verdict",
+        "@dynamic.watch",
+        "@dynamic.active-skill",
+        "@dynamic.take-skill"
+      ]
+    }
+  ]
+}

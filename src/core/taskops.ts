@@ -17,6 +17,7 @@ import { runProjectTransaction } from './transaction.js';
 import { assertRepositoryValid } from './validate.js';
 import { addPlannedTasks } from './planning.js';
 import { requireContent } from './documents.js';
+import { assertPlanMutable } from './refinement.js';
 
 export interface ClockOptions {
   readonly actor?: string | undefined;
@@ -24,6 +25,9 @@ export interface ClockOptions {
 }
 
 export interface AddTaskOptions extends ClockOptions {
+  readonly planning?: 'static' | 'dynamic';
+  readonly kind?: 'work' | 'acceptance' | 'decision';
+  readonly contentFiles?: readonly string[];
   /** Target graph; required when the project registers more than one graph. */
   readonly graph?: string | undefined;
   readonly title?: string | undefined;
@@ -95,6 +99,7 @@ export function reviseTask(root: string, options: ReviseTaskOptions): TaskDocume
       const current = requireTask(repository.taskById(options.id), options.id);
       const next = applyRevision(current, { ...options, title: options.summary ?? options.title,
         ...(options.content === undefined ? {} : { content: requireContent(root, options.content) }) });
+      assertPlanMutable(current, next);
       transaction.write(
         `.task-graph/tasks/${current.id}.md`,
         serializeTaskDocument(next),
@@ -165,6 +170,8 @@ export function replaceTask(root: string, options: ReplaceTaskOptions): {
       });
       const withLink: TaskDocument = {
         ...replacement,
+        ...(current.planning === undefined ? {} : { planning: current.planning }),
+        ...(current.kind === undefined ? {} : { kind: current.kind }),
         ...(options.summary !== undefined || options.content !== undefined ? { summary: title, body: `# ${title}\n` } : {}),
         ...(options.content === undefined ? {} : { content: requireContent(root, options.content) }),
         supersedes: [current.id],

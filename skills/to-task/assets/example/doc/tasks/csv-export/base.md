@@ -17,4 +17,4 @@
 
 ## 交付
 
-提交实现与必要检查，把验证结果写到 `doc/reports/csv-export/base.md`，通过 task complete 的 --report 参数绑定到本任务。
+提交实现与必要检查，把验证结果写到 `doc/reports/csv-export/base.md`，通过 `'task[<本任务ID>]' complete --report doc/reports/csv-export/base.md` 绑定到本任务。

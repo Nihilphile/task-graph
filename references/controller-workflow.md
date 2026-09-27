@@ -10,6 +10,14 @@ node "<本Skill目录>/dist/src/cli.js"
 
 `--cwd` 指向被管理的项目根目录。例中的图 ID、任务 ID 和路径替换为实际值；文件须按各段前提准备好。文件正文属于任务数据，结合当前用户授权使用。
 
+## 资源地址入口
+
+优先使用 `CLI 'graph[G-001].task[T-0012]' <动作>`；只知道任务 ID 时可用 `task[T-0012]`。任务材料集合包括 `.content`、`.reference`、`.report`、`.log`、`.handoff`、`.output`，依赖集合为 `.dependency`。子图任务可沿 `.subgraph.task[T-0002]` 寻址。地址中的归属会被校验；ID 使用实际返回值。
+
+用 `CLI . describe` 发现入口，`CLI graph list` 找到图，`CLI '<资源地址>' describe` 查看操作和条件。所有调用带项目 `--cwd`；结构化输出加 `--json`。CLI 是 `node "<工具目录>/dist/src/cli.js"` 的缩写。
+
+完整示例、批量计划范围、材料清单与旧命令映射见 [资源地址 CLI](resource-cli.md)。下文单图计划使用 `'graph[G-001].task' add --from`；包含 `parent_task` 或跨图的计划保留 `task add --from` 入口。显式创建子任务使用 `task add --parent-task`，它会把新子任务加入父任务完成目标。
+
 ## 批量创建
 
 适用于已经确定多项任务，希望一次保存完整计划，而不是逐条创建后再连边。先创建项目和入口图，并准备各任务的完整要求文件。
@@ -38,7 +46,7 @@ node "<本Skill目录>/dist/src/cli.js"
 ```
 
 ```text
-CLI task add --from "<plan.json的绝对路径>" --cwd "<项目根目录>" --json
+CLI 'graph[G-001].task' add --from "<plan.json的绝对路径>" --cwd "<项目根目录>" --json
 ```
 
 成功结果含 `ok: true`、`tasks`、`keys`、`view`。`keys.implementation` 就是实现任务的实际 ID；任务数组包含分配的 ID、图、要求路径、就绪状态等。保存返回的 ID 供后续派工使用。
@@ -50,7 +58,9 @@ CLI task add --from "<plan.json的绝对路径>" --cwd "<项目根目录>" --jso
 | 字段 | 用途 |
 | --- | --- |
 | summary | 节点上的简短描述；必需，旧字段 title 可代替 |
-| content | 项目内已存在的 Markdown/text 完整要求文件；建议每个执行任务提供 |
+| content | 项目内已存在的 Markdown/text 要求路径，或路径数组；全部共同生效 |
+| planning | static（默认）或 dynamic；动态任务须经主控 refine 才可开始 |
+| kind | work（默认）、acceptance（独立验收）或 decision（决策） |
 | key | 可选稳定名称；自动化重试时使用 |
 | graph | 所属图，省略时使用计划顶层 graph |
 | parent_task | 父任务 ID 或 @key；用于创建子任务，与该任务自己的 graph 二选一 |
@@ -98,20 +108,20 @@ CLI task add --parent-task T-0001 --summary "补齐文档" --content doc/tasks/d
 - 父任务的 `completion_requires` 默认包含两者；两者 done 后才允许 complete T-0001。
 - 父任务不会自动变成 done，需主控或执行者显式完成。
 - done/cancelled 父任务不能直接增加子任务：done 先 reopen；cancelled 为终态，应建立替代任务。
-- 特殊情况下可用 `task set-completion T-0001 --requires T-0002 --requires T-0003` **替换**完整目标列表；它不是追加操作。
+- 特殊情况下可用 `'task[T-0001]' set-completion --requires T-0002 --requires T-0003` **替换**完整目标列表；它不是追加操作。
 
 ### 只等其中一部分：gate
 
 假设外层“集成验证”任务 T-0004 只需接口完成，不必等待文档。给父任务公开名为 api-ready 的完成点：
 
 ```text
-CLI task expose-gate T-0001 --name api-ready --requires T-0002 --cwd "<项目根目录>" --json
-CLI task link T-0004 --depends-on T-0001 --gate api-ready --cwd "<项目根目录>" --json
+CLI 'task[T-0001]' expose-gate --name api-ready --requires T-0002 --cwd "<项目根目录>" --json
+CLI 'task[T-0004].dependency' add T-0001 --gate api-ready --cwd "<项目根目录>" --json
 ```
 
 gate 是主控给一组子任务起的名称，名称在该父任务内唯一；组内任务全部 done 后，这条部分依赖就满足，即使父任务仍在执行中。外层通过父任务加 gate 访问进度，不直接依赖内部子任务。
 
-普通完整依赖用 `task link T-0004 --depends-on T-0001`。同一条关系保存在后继 T-0004 的 depends_on 中，前置任务无需再记录反向关系。
+普通完整依赖用 `'task[T-0004].dependency' add T-0001`。同一条关系保存在后继 T-0004 的 depends_on 中，前置任务无需再记录反向关系。
 
 ### 同批创建父任务、子任务与 gate
 
@@ -152,7 +162,7 @@ parent_task 优先决定子任务归属，计划顶层 graph 不把它移回入�
 
 | 分类 | 保存方式 | 如何阅读 |
 | --- | --- | --- |
-| 任务要求 content | 引用一份当前要求文件 | 标签直接打开完整正文 |
+| 任务要求 content | 引用一份或多份当前要求文件 | 多份先显示列表，再打开完整正文 |
 | 报告 report | 可多份；每次附加保存文件快照 | 标签先开列表，再选报告 |
 | 工作记录 log | 一个默认日志，可另附多个当前文件 | 标签先开列表，再选日志 |
 | 交接 handoff | 可多份；保存生成或附加时的快照 | 标签先开列表，再选交接 |
@@ -162,46 +172,46 @@ parent_task 优先决定子任务归属，计划顶层 graph 不把它移回入�
 示例假设 T-0012 已存在，下面三个独立文件已写好：
 
 ```text
-CLI task report attach T-0012 --path doc/reports/test.md --title "第一次验证" --cwd "<项目根目录>" --json
-CLI task log attach T-0012 --path doc/logs/tester.md --title "测试代理记录" --cwd "<项目根目录>" --json
-CLI task handoff attach T-0012 --path doc/handoff/reviewer.md --title "补充交接说明" --cwd "<项目根目录>" --json
+CLI 'task[T-0012].report' attach --path doc/reports/test.md --title "第一次验证" --cwd "<项目根目录>" --json
+CLI 'task[T-0012].log' attach --path doc/logs/tester.md --title "测试代理记录" --cwd "<项目根目录>" --json
+CLI 'task[T-0012].handoff' attach --path doc/handoff/reviewer.md --title "补充交接说明" --cwd "<项目根目录>" --json
 ```
 
 报告附加本身不改变任务状态。任务尚未完成、仍要积累结果时用 attach；完成时可通过 complete 的重复 `--report` 一次提交多份尚未附加的报告。相同路径、相同内容重复附加会被拒绝；报告内容变化后可再次附加，列表保留多个版本。已附加的报告无须在 complete 时重复提交。
 
-追加普通进展用 `task log T-0012 --text "当前进展"`，工具自动创建并维护默认日志。另一个 Agent 有独立日志文件时才需要 log attach。
+追加普通进展用 `'task[T-0012].log' add --text "当前进展"`，工具自动创建并维护默认日志。另一个 Agent 有独立日志文件时才需要 log attach。
 
 ### 预览交接、保存交接、开始执行
 
-- `task show T-0012 --handoff --json`：只读预览，用于查看或派工，不增加交接条目。
-- `task handoff create T-0012 --title "交给复核代理"`：冻结当前要求正文与附件索引，不复制前置报告、日志或历史全文；保存为新交接条目，不改变任务状态。
-- `task handoff attach`：保存你自己写的交接文件。
-- `task start`：开始任务时自动保存一次交接快照；通常无需紧接着手动 create。
+- `'task[T-0012]' show --handoff --json`：只读预览，用于查看或派工，不增加交接条目。
+- `'task[T-0012].handoff' create --title "交给复核代理"`：冻结当前要求正文与附件索引，不复制前置报告、日志或历史全文；保存为新交接条目，不改变任务状态。
+- `'task[T-0012].handoff' attach`：保存你自己写的交接文件。
+- `'task[T-0012]' start`：开始任务时自动保存一次交接快照；通常无需紧接着手动 create。
 
 上述简写同样通过 CLI 入口运行，并带上项目 --cwd。主控仍需使用外部调度工具把交接内容交给实际执行者；保存 handoff 本身不发送消息或启动会话。
 
 ### 文件更新与离线边界
 
-入口图使用 `graph add --gh` 或 `graph publish` 开启 GitHub 后，正常任务命令也会自动发布 issue 与评论。首次配置、远程待同步的判断及文件上传边界见 [GitHub 同步参考](github-sync.md)；本节的离线文件版本规则继续适用。
+入口图创建时用 `CLI graph add --gh`，已有图用 `CLI 'graph[<入口图ID>]' publish --cwd "<项目根目录>" --json` 开启 GitHub；此后正常任务命令也会自动发布 issue 与评论。首次配置、远程待同步的判断及文件上传边界见 [GitHub 同步参考](github-sync.md)；本节的离线文件版本规则继续适用。
 
 附件在任务的 outputs 数组中记录，kind 区分 report、log、handoff；CLI 自动管理快照路径和内容摘要。任务要求、日志读取当前文件，编辑后 build 刷新 HTML。报告和交接读取附加时的快照，原文件改动不会改变已有版本。
 
-kind 也支持 reference。四类 attach 命令都可传 `--summary "文件内容和用途"`；未传时字段省略，title 默认文件名。`task handoff create --summary ...` 为生成的交接登记摘要。正文中的关键章节、符号或阅读场景可直接写在 summary，不需要额外 locator/read_when 字段。
+kind 也支持 reference。四类 attach 命令都可传 `--summary "文件内容和用途"`；未传时字段省略，title 默认文件名。`'task[T-0012].handoff' create --summary ...` 为生成的交接登记摘要。正文中的关键章节、符号或阅读场景可直接写在 summary，不需要额外 locator/read_when 字段。
 
 ### 接手文件清单与依赖参考
 
-`task start/reopen/show` 的成功响应提供顶层 guidance（skill、skill_path、message）。执行者读取 skill_path 指向的 task-take，按指南写接手记录后自主施工，并在完成前登记后继需要的参考。skill_path 是随 CLI 安装位置解析的绝对路径，与下面相对项目根目录的 context 文件地址不同；不持久化到任务或 handoff。主控已记录开始时，让执行者 show 后继续，避免重复 start。
+任务地址的 `start/reopen/show` 的成功响应提供顶层 guidance（skill、skill_path、message）。执行者读取 skill_path 指向的 task-take，按指南写接手记录后自主施工，并在完成前登记后继需要的参考。skill_path 是随 CLI 安装位置解析的绝对路径，与下面相对项目根目录的 context 文件地址不同；不持久化到任务或 handoff。主控已记录开始时，让执行者 show 后继续，避免重复 start。
 
 先写好接入说明，或定位到现有源代码文件，然后登记一次：
 
 ```text
-CLI task reference attach T-0012 --path doc/references/report-store.md --summary "保存接口、错误语义与代码索引" --cwd "<项目根目录>" --json
-CLI task reference attach T-0012 --path src/reports/types.ts --title "报告类型" --summary "SavedReport 定义" --cwd "<项目根目录>" --json
+CLI 'task[T-0012].reference' attach --path doc/references/report-store.md --summary "保存接口、错误语义与代码索引" --cwd "<项目根目录>" --json
+CLI 'task[T-0012].reference' attach --path src/reports/types.ts --title "报告类型" --summary "SavedReport 定义" --cwd "<项目根目录>" --json
 ```
 
 示例文件须在真实项目中先存在。reference 默认 live，原文件改动后 build 刷新；需要冻结时加 `--snapshot`。已有同模式同版本登记不能重复附加；修改绑定元信息可先 output remove，再重新 attach，注意 remove 会移除同路径的所有附件版本。
 
-后继通过 `task show` 或成功的 `task start` 得到相同来源规则的顶层 context，无需再复制登记：
+后继通过 `'task[<任务ID>]' show` 或成功的 `'task[<任务ID>]' start` 得到相同来源规则的顶层 context，无需再复制登记：
 
 ```json
 {
@@ -240,10 +250,10 @@ reference、report 和普通产物的来源包括自身、直接完全依赖，�
 查询中的 GitHub 状态来自最近保存的同步记录；清单查询不读取全部附件重新计算远程内容指纹。直接编辑文件后通过 build/github sync 刷新发布状态。
 
 ```text
-CLI task show T-0012 --manifest --cwd "<项目根目录>" --json
-CLI task show T-0012 --handoff --expand content --expand report --preview --cwd "<项目根目录>" --json
-CLI task show T-0012 --handoff --expand-path doc/reports/implementation.md --cwd "<项目根目录>" --json
-CLI task show T-0012 --expand report --exclude-path doc/reports/tool-feedback.md --cwd "<项目根目录>" --json
+CLI 'task[T-0012]' show --manifest --cwd "<项目根目录>" --json
+CLI 'task[T-0012]' show --handoff --expand content --expand report --preview --cwd "<项目根目录>" --json
+CLI 'task[T-0012]' show --handoff --expand-path doc/reports/implementation.md --cwd "<项目根目录>" --json
+CLI 'task[T-0012]' show --expand report --exclude-path doc/reports/tool-feedback.md --cwd "<项目根目录>" --json
 ```
 
 --expand 可重复选择 content/report/log/reference/handoff/output；--expand-path 可重复选择原始路径或 read_path。--exclude-path 精确匹配项目相对原始路径或快照路径，支持正反斜杠，不支持 glob；排除优先。--manifest 与正文选择互斥。--preview 不读取附件正文，返回 selected_files、selected_bytes、estimated_chars_upper_bound、omitted_count 和 excluded。字符数按 UTF-8 文件字节数与格式开销估计 UTF-16 长度上界，非 token 数；文件变化或读取错误会影响实际结果。
@@ -251,8 +261,8 @@ CLI task show T-0012 --expand report --exclude-path doc/reports/tool-feedback.md
 用途与类别独立：实现报告和工具反馈都可为 report，但后者可设 audience=user：
 
 ```text
-CLI task report attach T-0012 --path doc/reports/tool-feedback.md --audience user --summary "供用户审阅的工具意见" --cwd "<项目根目录>" --json
-CLI task output set-audience T-0012 --path doc/reports/tool-feedback.md --audience user --cwd "<项目根目录>" --json
+CLI 'task[T-0012].report' attach --path doc/reports/tool-feedback.md --audience user --summary "供用户审阅的工具意见" --cwd "<项目根目录>" --json
+CLI 'task[T-0012].output' set-audience --path doc/reports/tool-feedback.md --audience user --cwd "<项目根目录>" --json
 ```
 
 四类 attach 均支持 audience，未指定默认 agent；set-audience 更新该来源路径下所有类别/版本的绑定，保留文件和快照。user 附件仍在 HTML 展示，但代理 context、显式展开及新生成 handoff 都排除，仅在 excluded 中保留来源/路径/原因，不复制其摘要。用途不是访问控制或 GitHub 发布开关，已发布的评论不回撤；人工阅读使用 HTML。
@@ -267,18 +277,18 @@ CLI task output set-audience T-0012 --path doc/reports/tool-feedback.md --audien
 
 文件快照保存该附件自身的字节，不递归冻结引用的文件。本地 PNG/JPEG/GIF/WebP 按构建时内容嵌入 HTML；需单独留存的证据图片可以作为报告附件保存。外部网址保留链接。不可读的文件会在对应视图条目显示错误，按提示修复路径或文件后重新 build。
 
-普通产物可用 `task output add T-0012 --path doc/results/planned.txt` 提前登记计划路径。移除附件记录用 `task output remove T-0012 --path <路径>`：同路径的多个版本会一并移除，磁盘文件保留。两条命令同样需要 CLI 前缀和项目 --cwd。
+普通产物可用 `'task[T-0012].output' add --path doc/results/planned.txt` 提前登记计划路径。移除附件记录用 `'task[T-0012].output' remove --path <路径>`：同路径的多个版本会一并移除，磁盘文件保留。两条命令同样需要 CLI 前缀和项目 --cwd。
 
 ## 修订与旧任务
 
-- 改摘要：`task revise T-0012 --summary "新的简述"`。
-- 换要求文件：先写好文件，再 `task revise T-0012 --content doc/tasks/revised.md`。
+- 改摘要：`'task[T-0012]' revise --summary "新的简述"`。
+- 换首份要求文件：先写好文件，再 `'task[T-0012]' revise --content doc/tasks/revised.md`；其他绑定不会被清除。增量补充用 `'task[T-0012].content' attach`，撤销某份绑定用 `'task[T-0012].content' remove`。动态执行中的要求需先协调施工。
 - 只改要求正文：直接编辑绑定文件，然后 validate/build。
-- 记进展：使用 task log；revise 的 `--note` 是修改历史说明，不会追加工作记录。
-- 改为另一项工作：查看 `CLI help "task revise"` 的 `--replace` 选项，取消旧任务并建立替代任务。
+- 记进展：使用 `'task[T-0012].log' add`；revise 的 `--note` 是修改历史说明，不会追加工作记录。
+- 改为另一项工作：查看 `CLI 'task[<任务ID>]' revise --help` 的 `--replace` 选项，取消旧任务并建立替代任务。
 
 这些简写同样带 CLI 前缀与项目 --cwd。状态和领取变更参数通过 help 查询，不直接手改 YAML frontmatter。
 
-旧任务的 --title 与内嵌正文继续有效。未绑定 content 的任务在侧栏显示自身正文；已有“## 工作记录”章节继续接收 task log 追加，并出现在工作记录分类。只有在需要统一要求来源时才绑定外部 content，无需为使用新版批量迁移旧任务。
+旧任务的 --title 与内嵌正文继续有效。未绑定 content 的任务在侧栏显示自身正文；已有“## 工作记录”章节继续接收 `'task[T-0012].log' add` 追加，并出现在工作记录分类。只有在需要统一要求来源时才绑定外部 content，无需为使用新版批量迁移旧任务。
 
 旧版普通产物不自动推断为 report。要将已有文件登记为报告，使用 report attach 明确绑定；原普通产物记录是否保留由主控按实际需求决定。

@@ -9,8 +9,12 @@ import { readProjectManifest } from '../core/project.js';
 import { buildProject } from '../core/build.js';
 import { resolveCwd } from './paths.js';
 import { readGitHubState, type GitHubView } from '../core/github-state.js';
+import { kickWatchWorker } from '../core/watch.js';
+import type { DesktopAdapter } from '../core/desktop-notify.js';
+import { prepareResource, resourceOutput } from './resources.js';
 
 export interface MainOptions {
+  desktopAdapter?: DesktopAdapter;
   githubClient?: GitHubClient;
   cwd?: string;
   io?: CliIo;
@@ -32,9 +36,10 @@ export function defaultIo(): CliIo {
  * `process.argv` and `process.exitCode`.
  */
 export async function main(argv: readonly string[], options: MainOptions = {}): Promise<number> {
-  const io = options.io ?? defaultIo();
+  let io = options.io ?? defaultIo();
   const commands = createRegistry();
-  const ctx: CliContext = {
+  let ctx: CliContext = {
+    desktopAdapter: options.desktopAdapter,
     cwd: options.cwd ?? process.cwd(),
     io,
     now: options.now ?? (() => new Date()),
@@ -52,6 +57,15 @@ export async function main(argv: readonly string[], options: MainOptions = {}): 
       io.out(renderHelp(commands));
       return EXIT_OK;
     }
+    const invocation = prepareResource(argv, ctx, commands);
+    if (invocation === null) return EXIT_OK;
+    if (invocation) {
+      argv = invocation.argv;
+      const originalIo = io;
+      const resourceArgs = parseArgs(argv, matchCommand(commands, argv).wordCount);
+      if (resourceArgs.flag('json')) io = { ...io, out: text => originalIo.out(resourceOutput(text, invocation, resolveCwd(ctx, resourceArgs))) };
+      ctx = { ...ctx, io, scopedGraph: invocation.scopedGraph };
+    }
     const { command, wordCount } = matchCommand(commands, argv);
     if (!command) {
       const word = argv[0] ?? '';
@@ -64,8 +78,16 @@ export async function main(argv: readonly string[], options: MainOptions = {}): 
     }
     const readOnly = ['help', 'validate', 'skill validate', 'task list', 'task show'].includes(command.name);
     if (readOnly) return await command.run(ctx, args);
+    if (command.name === 'graph watch' || command.name === 'graph unwatch') return await command.run(ctx, args);
     const output: string[] = [];
-    const result = await command.run({ ...ctx, io: { out: text => output.push(text), err: io.err } }, args);
+    let result: number;
+    try { result = await command.run({ ...ctx, io: { out: text => output.push(text), err: io.err } }, args); }
+    finally {
+      if (!options.desktopAdapter) {
+        try { kickWatchWorker(resolveCwd(ctx, args)); }
+        catch (error) { io.err(`Desktop delivery pending: ${error instanceof Error ? error.message : String(error)}`); }
+      }
+    }
     let github: GitHubView | undefined;
     if (result === EXIT_OK) {
       const root = resolveCwd(ctx, args);

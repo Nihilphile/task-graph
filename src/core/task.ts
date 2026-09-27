@@ -5,7 +5,7 @@ import { projectPaths, taskFileName, relativePath } from './layout.js';
 import { isTimestamp } from './time.js';
 import { isPlainObject, parseYamlDocument, stringifyYamlDocument } from './yaml-io.js';
 
-export const TASK_STATUSES = ['todo', 'in_progress', 'done', 'cancelled'] as const;
+export const TASK_STATUSES = ['todo', 'in_progress', 'done', 'reject', 'cancelled'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 export const TASK_ID_PATTERN = /^T-\d{4,}$/;
@@ -23,6 +23,9 @@ export const TASK_FRONTMATTER_FIELDS = [
   'creation_fingerprint',
   'graph',
   'status',
+  'planning',
+  'kind',
+  'refinement',
   'claim',
   'depends_on',
   'manual_blockers',
@@ -64,7 +67,7 @@ export interface TaskSubgraph {
 export interface TaskOutput {
   readonly path: string;
   readonly note?: string;
-  readonly kind?: 'report' | 'log' | 'handoff' | 'reference';
+  readonly kind?: 'content' | 'report' | 'log' | 'handoff' | 'reference';
   readonly summary?: string;
   readonly audience?: 'agent' | 'user';
   readonly handoffFormat?: 'indexed-v1';
@@ -86,6 +89,9 @@ export interface TaskHistoryEntry {
 }
 
 export interface TaskDocument {
+  readonly planning?: 'static' | 'dynamic';
+  readonly kind?: 'work' | 'acceptance' | 'decision';
+  readonly refinement?: { readonly at: string; readonly actor: string | null; readonly reason: string; readonly fingerprint: string };
   readonly id: string;
   readonly summary?: string;
   readonly content?: string;
@@ -185,6 +191,10 @@ function readTaskFields(
     );
   }
   const status = rawStatus as TaskStatus;
+  if (value['planning'] !== undefined && !['static', 'dynamic'].includes(String(value['planning']))) throw new TaskGraphError('E_TASK_FORMAT', 'planning must be static or dynamic');
+  if (value['kind'] !== undefined && !['work', 'acceptance', 'decision'].includes(String(value['kind']))) throw new TaskGraphError('E_TASK_FORMAT', 'kind must be work, acceptance or decision');
+  const refinement = value['refinement'];
+  if (refinement !== undefined && (!isPlainObject(refinement) || typeof refinement['at'] !== 'string' || !isTimestamp(refinement['at']) || typeof refinement['reason'] !== 'string' || !refinement['reason'].trim() || typeof refinement['fingerprint'] !== 'string' || !/^[a-f0-9]{64}$/.test(refinement['fingerprint']) || (refinement['actor'] !== null && typeof refinement['actor'] !== 'string'))) throw new TaskGraphError('E_TASK_FORMAT', 'Invalid refinement record');
 
   return {
     id,
@@ -194,6 +204,9 @@ function readTaskFields(
     ...(value['creation_fingerprint'] === undefined ? {} : { creationFingerprint: readOptionalString(value['creation_fingerprint'], source, 'creation_fingerprint') }),
     graph,
     status,
+    ...(value['planning'] === undefined ? {} : { planning: value['planning'] as TaskDocument['planning'] }),
+    ...(value['kind'] === undefined ? {} : { kind: value['kind'] as TaskDocument['kind'] }),
+    ...(refinement === undefined ? {} : { refinement: refinement as TaskDocument['refinement'] }),
     claim: readClaim(value['claim'], source),
     dependsOn: readDependencies(value['depends_on'], source),
     manualBlockers: readStringArray(value['manual_blockers'], source, 'manual_blockers'),
@@ -318,7 +331,7 @@ function readOutputs(value: unknown, source: string): TaskOutput[] {
         const text = readOptionalString(entry[disk], source, `outputs[${index}].${disk}`);
         if (text !== undefined) result[field] = text;
       }
-      if (result['kind'] !== undefined && !['report', 'log', 'handoff', 'reference'].includes(result['kind'])) {
+      if (result['kind'] !== undefined && !['content', 'report', 'log', 'handoff', 'reference'].includes(result['kind'])) {
         throw new TaskGraphError('E_TASK_FORMAT', `${source}: unsupported output kind "${result['kind']}"`);
       }
       if (result['audience'] !== undefined && !['agent', 'user'].includes(result['audience'])) throw new TaskGraphError('E_TASK_FORMAT', `${source}: unsupported output audience`);
@@ -612,6 +625,9 @@ export function serializeTaskDocument(document: TaskDocument): string {
     ...(document.creationFingerprint === undefined ? {} : { creation_fingerprint: document.creationFingerprint }),
     graph: document.graph,
     status: document.status,
+    ...(document.planning === undefined ? {} : { planning: document.planning }),
+    ...(document.kind === undefined ? {} : { kind: document.kind }),
+    ...(document.refinement === undefined ? {} : { refinement: document.refinement }),
     claim: document.claim
       ? {
           role: document.claim.role,
@@ -665,6 +681,12 @@ export function withTaskDocument(
   changes: Partial<TaskDocument>,
 ): TaskDocument {
   return { ...document, ...changes };
+}
+
+/** Current requirements, in binding order. The original single content remains compatible. */
+export function contentBindings(task: TaskDocument): readonly TaskOutput[] {
+  const files = [...(task.content ? [{ path: task.content, title: task.title, summary: task.summary ?? task.title }] : []), ...task.outputs.filter(o => o.kind === 'content')];
+  return files.length ? files : [{ path: `.task-graph/tasks/${task.id}.md`, title: task.title, summary: task.summary ?? task.title }];
 }
 
 export function appendHistory(

@@ -1,0 +1,24 @@
+import { refineTask } from '../../core/refinement.js';
+import { computeReadiness } from '../../core/readiness.js';
+import { loadTaskRepository } from '../../core/repo.js';
+import { usageError } from '../../core/errors.js';
+import { resolveCwd } from '../paths.js';
+import { EXIT_OK, type CommandSpec } from '../context.js';
+
+export function taskRefineCommands(): CommandSpec[] {
+  return ['refine', 'unrefine'].map(action => ({
+    name: `task ${action}`, summary: action === 'refine' ? 'Record controller assessment and make a dynamic task executable' : 'Return an unclaimed task to dynamic planning',
+    usage: `task-graph task ${action} T-NNNN --reason <assessment> [--actor <controller>] [--cwd <dir>] [--json]`,
+    details: ['Refine after checking all current requirements, acceptance criteria and upstream capabilities. This records input fingerprints, not semantic proof.', 'Dependencies completing never refine a task automatically. Requirements or upstream reference changes require another assessment.'],
+    run(ctx, args) {
+      const id = args.positionals[0], reason = args.opt('reason');
+      if (!id || !reason) throw usageError('Pass task ID and --reason');
+      const root = resolveCwd(ctx, args);
+      const task = refineTask(root, { id, reason, reset: action === 'unrefine', actor: args.opt('actor'), now: () => ctx.now() });
+      const state = computeReadiness(loadTaskRepository(root)).get(id);
+      if (args.flag('json')) ctx.io.out(JSON.stringify({ ok: true, task: { id, refinement: task.refinement, ...state } }));
+      else if (!args.flag('quiet')) ctx.io.out(`${id}: ${state?.planningState}`);
+      return EXIT_OK;
+    },
+  }));
+}

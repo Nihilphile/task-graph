@@ -1,12 +1,14 @@
 ---
 name: to-task
 description: >-
-  把已讨论的需求、PRD、spec 或实施计划拆成可独立验收的任务，直接写入 task-graph，
+  把已讨论的需求、PRD、spec 或实施计划一次性详细拆成可独立验收的任务，直接写入 task-graph，
   生成完整要求文件、依赖数组与离线 HTML；用户需要时由 task-graph 自动发布到 GitHub。
   适用于从规划进入可派工任务、给已有交付拆子任务或续补计划；日常状态和报告维护使用 task-graph。
 ---
 
 # To Task
+
+本 Skill 采用一次性详细规划。用户选择先建骨架、依赖完成后再 refine 时，使用同包的 [to-active-task](../to-active-task/SKILL.md)；两者是可选工作流，不是先后步骤。本模式创建的任务默认 static，保持原有领取方式。
 
 把确认后的工作变成空白上下文的执行 Agent 可以接手的任务图。假设接手者没有读过本轮对话、主控的私有笔记或其他任务：只拿到项目位置、CLI 入口和 task ID，也能通过任务正文及其明确引用恢复所需信息。保留 tracer bullet（纵向切片）的拆分方法：每个实现任务交付一条窄而完整、可演示或验证的行为路径，覆盖实现该行为实际需要的层。
 
@@ -18,13 +20,13 @@ description: >-
 
 先确定项目根目录和本次工作范围。必要时检查相关代码、领域术语和架构决策，找出已有能力、真实约束及可复用的验证入口。已有探索结论继续使用。
 
-确认 `$task-graph` 可用，按技能目录找到 `dist/src/cli.js`。以下 **CLI** 是 `node "<task-graph技能目录>/dist/src/cli.js"` 的文字缩写；执行时替换为真实路径。所有命令带项目 `--cwd`，计划文件 `--from` 使用绝对路径。首次安装或入口不可用时，读取 task-graph 的 SKILL.md 完成准备。
+确认 `$task-graph` 可用，从 task-graph 工具根目录找到 `dist/src/cli.js`。本 Skill 若通过 junction 安装，先解析其实际目标路径，再由 `skills/to-task` 向上两级定位工具根。以下 **CLI** 是 `node "<task-graph工具根>/dist/src/cli.js"` 的文字缩写；执行时替换为真实路径。所有命令带项目 `--cwd`，计划文件 `--from` 使用绝对路径。首次安装或入口不可用时，读取工具根的 SKILL.md 完成准备。日常操作使用 `graph[<图ID>].task[<任务ID>]` 地址，查询参数用 `<地址> describe`；地址与批量范围见 [资源地址 CLI](../../references/resource-cli.md)。
 
 已有 `<项目根目录>/.task-graph/project.yaml` 时，读取图注册信息，再运行：
 
 ```text
 CLI task list --cwd "<项目根目录>" --json
-CLI task show <相关任务ID> --cwd "<项目根目录>" --json
+CLI 'graph[<图ID>].task[<相关任务ID>]' show --cwd "<项目根目录>" --json
 ```
 
 据此决定：扩展用户指定的图、拆分指定父任务，或为独立交付新建入口图。存在多个合理目标且上下文不能确定时询问目标；已知目标继续使用。重试时先检查已有计划、稳定 key 和实际 ID。
@@ -81,6 +83,8 @@ CLI task show <相关任务ID> --cwd "<项目根目录>" --json
 
 所有 content 路径相对项目根目录，提交前文件须已存在。JSON 仅包含真实 CLI 字段，不加入估时、执行模型或自定义状态等未支持字段。完整可运行示例见 [assets/example/plan.json](assets/example/plan.json)，其任务文件位于同目录下的 `doc/tasks/`；实际使用时按需求改写。
 
+content 也可使用文件路径数组，例如 `["doc/tasks/shared-constraints.md", "doc/tasks/feature.md"]`；当前绑定的全部文件共同构成要求。用户希望主控只读验收报告时，增加 `kind: "acceptance"` 的独立验收任务并纳入父任务完成目标，明确执行者验证与独立验收的分工。验收报告必须明确 pass/reject；具体交付命令由 task-take 指导。
+
 拆已有父任务、使用命名完成点或修订旧计划时，读 [复杂关系与恢复](references/relationships-and-recovery.md)。
 
 ## 4. 写入 Task Graph
@@ -88,7 +92,7 @@ CLI task show <相关任务ID> --cwd "<项目根目录>" --json
 新项目先初始化；已有项目直接复用：
 
 ```text
-CLI init --name "<项目名>" --cwd "<项目根目录>" --json
+CLI . init --name "<项目名>" --cwd "<项目根目录>" --json
 ```
 
 需要新入口图时创建并读取返回的 `graph.id`，立即将返回值保存到计划旁的 `graph-created.json`；已有图直接记录已确认的实际 ID：
@@ -97,15 +101,23 @@ CLI init --name "<项目名>" --cwd "<项目根目录>" --json
 CLI graph add --title "<本次交付>" --entry --cwd "<项目根目录>" --json
 ```
 
-用户要求发布到 GitHub 时，在这个 graph add 命令加 `--gh`，仓库需要明确指定时加 `--repo owner/repo`。已有图首次开启用 `graph publish <图ID> [--repo owner/repo]`。设置在图上持久保存，子图继承；后续 Agent 正常使用任务命令即可。`--gh` 是 task-graph 的参数，不是另一个 to-task 可执行程序。
+用户要求发布到 GitHub 时，在这个 graph add 命令加 `--gh`，仓库需要明确指定时加 `--repo owner/repo`。已有图首次开启用 `'graph[<图ID>]' publish [--repo owner/repo]`。设置在图上持久保存，子图继承；后续 Agent 正常使用任务命令即可。`--gh` 是 task-graph 的参数，不是另一个 to-task 可执行程序。
 
 从 GitHub issue 读取需求不等于开启发布；未指定发布的新图保持本地。来源 issue 作为要求中的引用保留；当前同步会创建新的总 issue，不把来源 issue 自动收编或关闭。已有启用的图继续使用其同步设置。具体权限和发布范围按需读 task-graph 的 `references/github-sync.md`。
 
 用实际图 ID 一次提交完整批次，保存 JSON 返回值到计划旁的 `created.json`，便于后续查 ID：
 
+单图且不含 parent_task 的计划用资源地址集合提交：
+
+```text
+CLI 'graph[<图ID>].task' add --from "<plan.json绝对路径>" --cwd "<项目根目录>" --json
+```
+
+此集合会拒绝计划中其他图或 `parent_task`。跨图与父子计划使用下列 `task add` 入口；`--graph` 提供默认图，其余放置规则由计划字段决定。父任务已存在时，单个子任务也可用 `task add --parent-task <父任务ID>`；它会创建或复用子图并默认加入父任务完成目标，直接向已有 `.subgraph.task` 集合 add 则不会自动加入完成目标。
+
 ```text
 CLI task add --from "<plan.json绝对路径>" --graph <实际图ID> --cwd "<项目根目录>" --json
-CLI validate --cwd "<项目根目录>" --json
+CLI . validate --cwd "<项目根目录>" --json
 CLI task list --available --cwd "<项目根目录>" --json
 ```
 
@@ -115,13 +127,13 @@ CLI task list --available --cwd "<项目根目录>" --json
 
 ## 5. 交给下一位主控或执行者
 
-派工前，逐项打开 `task show <ID> --manifest --json`，读取要求入口及必要引用，核对能否找到背景、工作范围、必要接口、执行入口、验收方法和交付位置。清单不内联正文；需要时按路径显式展开，遵守 excluded 中的用途排除及项目交接约定。验证必读引用确实可定位、接手环境可以读取；这项检查不能由 `validate` 的结构校验代替。
+派工前，逐项打开 `'graph[<图ID>].task[<ID>]' show --manifest --json`，读取要求入口及必要引用，核对能否找到背景、工作范围、必要接口、执行入口、验收方法和交付位置。清单不内联正文；需要时按路径显式展开，遵守 excluded 中的用途排除及项目交接约定。验证必读引用确实可定位、接手环境可以读取；这项检查不能由 `validate` 的结构校验代替。
 
-缺失信息会影响开工时，先补齐；应由前置任务提供的内容保留真实 depends_on，其他未解决的关键缺口用 manual_blockers 或 task block 记录，并说明解除条件。可选背景资料不阻塞任务。已有依赖满足、readiness 为 ready 仍不证明任务上下文完整。
+缺失信息会影响开工时，先补齐；应由前置任务提供的内容保留真实 depends_on，其他未解决的关键缺口用 manual_blockers 或任务的 block 操作记录，并说明解除条件。可选背景资料不阻塞任务。已有依赖满足、readiness 为 ready 仍不证明任务上下文完整。
 
 交付实际项目路径、CLI 路径、graph ID、任务 key→ID、第一批可开始的任务和 HTML 链接；使用独立 checkout/worktree 时标明应进入的位置。有未决问题或待同步时一并说明。`created.json` 是创建回执，当前状态以查询结果为准。
 
-派工消息提供项目、CLI 路径和 task ID，并要求执行者阅读 start/show 返回的 guidance.skill_path（task-take）。接手、施工和交付流程统一由该指南维护；主控从任务工作记录和附件查询结果。
+派工消息提供项目、CLI 路径和完整任务地址（含 graph ID 与 task ID），并要求执行者阅读 start/show 返回的 guidance.skill_path（task-take）。接手、施工和交付流程统一由该指南维护；主控从任务工作记录和附件查询结果。
 
 主控需要了解的协作约定：
 

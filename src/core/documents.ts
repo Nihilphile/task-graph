@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { Marked } from 'marked';
 import { TaskGraphError } from './errors.js';
 import { mutateTaskDocument, timestampOf, type ClockOptions } from './mutate.js';
-import { historyEntry, type TaskDocument, type TaskOutput } from './task.js';
+import { contentBindings, historyEntry, type TaskDocument, type TaskOutput } from './task.js';
 import type { ProjectTransaction } from './transaction.js';
 import { loadTaskRepository } from './repo.js';
 import { computeReadiness } from './readiness.js';
@@ -32,6 +32,7 @@ export interface DocumentView {
 }
 export interface TaskDocuments {
   readonly content: DocumentView;
+  readonly contents: readonly DocumentView[];
   readonly reports: readonly DocumentView[];
   readonly logs: readonly DocumentView[];
   readonly handoffs: readonly DocumentView[];
@@ -129,7 +130,7 @@ export function snapshotDocument(transaction: ProjectTransaction, source: string
 
 export interface AttachDocumentOptions extends ClockOptions {
   readonly id: string;
-  readonly kind: 'report' | 'log' | 'handoff' | 'reference';
+  readonly kind: 'content' | 'report' | 'log' | 'handoff' | 'reference';
   readonly path: string;
   readonly title?: string;
   readonly note?: string;
@@ -141,9 +142,14 @@ export interface AttachDocumentOptions extends ClockOptions {
 export function withDocument(root: string, current: TaskDocument, transaction: ProjectTransaction, options: AttachDocumentOptions): TaskDocument {
   if (options.audience !== undefined && !['agent', 'user'].includes(options.audience)) throw new TaskGraphError('E_DOCUMENT_AUDIENCE', 'Audience must be agent or user');
   const file = documentPath(options.path);
+  if (options.kind === 'content') {
+    requireContent(root, file);
+    if (options.audience === 'user') throw new TaskGraphError('E_CONTENT_AUDIENCE', 'Task requirements must be readable by the executing agent');
+    if (current.content === file) throw new TaskGraphError('E_DUP_OUTPUT', 'This file is already task content');
+  }
   const bytes = readDocument(root, file);
   if (options.snapshot && options.kind !== 'reference') throw new TaskGraphError('E_DOCUMENT_MODE', '--snapshot is only supported for reference attachments');
-  const snapshot = options.kind === 'log' || (options.kind === 'reference' && !options.snapshot) ? {} : snapshotDocument(transaction, file, bytes);
+  const snapshot = options.kind === 'content' || options.kind === 'log' || (options.kind === 'reference' && !options.snapshot) ? {} : snapshotDocument(transaction, file, bytes);
   if (current.outputs.some((output) => output.path === file && output.kind === options.kind && output.sha256 === ('sha256' in snapshot ? snapshot.sha256 : undefined))) {
     throw new TaskGraphError('E_DUP_OUTPUT', `Task "${current.id}" already contains this ${options.kind} document`);
   }
@@ -163,12 +169,23 @@ export function attachDocument(root: string, options: AttachDocumentOptions): Ta
   return mutateTaskDocument(root, options.id, (current, transaction) => withDocument(root, current, transaction, options));
 }
 
+export function removeContent(root: string, options: ClockOptions & { id: string; path: string }): TaskDocument {
+  const file = documentPath(options.path);
+  return mutateTaskDocument(root, options.id, current => {
+    if (current.content !== file && !current.outputs.some(o => o.kind === 'content' && o.path === file)) throw new TaskGraphError('E_NO_CONTENT', 'Content is not bound to this task');
+    const next = { ...current, ...(current.content === file ? { content: undefined } : {}), outputs: current.outputs.filter(o => o.kind !== 'content' || o.path !== file) };
+    if (!next.content && !next.outputs.some(o => o.kind === 'content')) throw new TaskGraphError('E_CONTENT_EMPTY', 'Keep at least one requirements file; attach the replacement first');
+    return { ...next, history: [...next.history, historyEntry('content_removed', timestampOf(options.now), options.actor ?? null, { path: file })] };
+  });
+}
+
 export function setDocumentAudience(root: string, options: ClockOptions & { id: string; path: string; audience: string }): TaskDocument {
   if (options.audience !== 'agent' && options.audience !== 'user') throw new TaskGraphError('E_DOCUMENT_AUDIENCE', 'Audience must be agent or user');
   const file = documentPath(options.path);
   const audience = options.audience;
   return mutateTaskDocument(root, options.id, current => {
     if (!current.outputs.some(o => o.path === file)) throw new TaskGraphError('E_NO_OUTPUT', `Task "${options.id}" does not list "${file}"`);
+    if (audience === 'user' && current.outputs.some(o => o.path === file && o.kind === 'content')) throw new TaskGraphError('E_CONTENT_AUDIENCE', 'Task requirements must remain agent-readable');
     return { ...current, outputs: current.outputs.map(o => o.path === file ? { ...o, audience } : o),
       history: [...current.history, historyEntry('audience_changed', timestampOf(options.now), options.actor ?? null, { path: file, audience })] };
   });
@@ -206,13 +223,14 @@ export function documentView(root: string, kind: DocumentKind, output: TaskOutpu
 export function taskDocuments(root: string, task: TaskDocument): TaskDocuments {
   const inline: DocumentView = { id: 'content:inline', kind: 'content', title: task.title,
     path: `.task-graph/tasks/${task.id}.md`, body: task.body, html: renderDocumentMarkdown(root, `.task-graph/tasks/${task.id}.md`, task.body) };
-  const content = task.content ? documentView(root, 'content', { path: task.content, title: task.title }) : inline;
+  const contents = contentBindings(task).map(o => o.path === inline.path ? inline : documentView(root, 'content', o));
+  const content = contents[0]!;
   const documents = task.outputs.map((output) => documentView(root, output.kind ?? 'output', output));
   const sorted = (kind: DocumentKind): DocumentView[] => documents.filter((doc) => doc.kind === kind).reverse().sort((a, b) => (b.addedAt ?? '').localeCompare(a.addedAt ?? ''));
   const logs = sorted('log');
   const legacy = /^##[ \t]+工作记录[ \t]*\r?\n([\s\S]*?)(?=^##[ \t]+|(?![\s\S]))/m.exec(task.body)?.[1]?.trim();
   if (legacy) logs.push({ id: 'log:inline', kind: 'log', title: '任务正文中的工作记录', path: inline.path, body: legacy, html: renderDocumentMarkdown(root, inline.path, legacy) });
-  return { content, reports: sorted('report'), logs, handoffs: sorted('handoff'), outputs: sorted('output'), references: sorted('reference') };
+  return { content, contents, reports: sorted('report'), logs, handoffs: sorted('handoff'), outputs: sorted('output'), references: sorted('reference') };
 }
 
 export interface HandoffOptions extends ContextOptions {
@@ -254,7 +272,7 @@ export function agentHandoff(root: string, task: TaskDocument, options: HandoffO
     let error = file.error;
     if (!error && textFile(file.read_path)) {
       try {
-        body = file.kind === 'content' && !task.content ? task.body
+        body = file.kind === 'content' && file.path === `.task-graph/tasks/${task.id}.md` ? task.body
           : file.section === 'work_log' ? /^##[ \t]+工作记录[ \t]*\r?\n([\s\S]*?)(?=^##[ \t]+|(?![\s\S]))/m.exec(task.body)?.[1]?.trim() ?? ''
           : readDocument(root, file.read_path).toString('utf8');
       } catch (cause) { error = cause instanceof Error ? cause.message : String(cause); }
