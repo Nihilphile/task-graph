@@ -59,7 +59,7 @@ description: >-
 - `task list --available`：哪些待办已满足工具的开工条件；其中可能包含负责统筹的父任务。
 - `'graph[<图ID>].task[<ID>]' show --manifest`：任务事实、当前要求和参考资料的地址清单。
 
-`context.contents` 列出全部当前要求，`context.references` 保留参考的摘要和来源。`read_path` 相对 `context.project_root`，固定版本指向快照。可根据问题选择要读的文件，遵守 excluded 和项目交接约定；需要 CLI 展开正文时可用 `--expand-path <路径>`，体量预览用 `--preview`。
+`context.contents` 列出全部当前要求，`context.review_requirements` 列出独立验收要求，`context.references` 保留参考的摘要和来源。`read_path` 相对 `context.project_root`，固定版本指向快照。可根据问题选择要读的文件，遵守 excluded 和项目交接约定；需要 CLI 展开正文时可用 `--expand-path <路径>`，体量预览用 `--preview`。
 
 ### 用节点和关系表达当前理解
 
@@ -111,6 +111,8 @@ CLI 'graph[<图ID>].task[<ID>].content' attach --path docs/tasks/details.md --su
 
 工具保留失败报告，reject 继续阻塞后继和父任务完成目标。复验使用显式 reopen，动态任务仍需当前有效的 refinement。环境缺失导致无法验证时，可以记录缺口并 block。父任务的 completion_requires 全部满足后，由主控审阅结果并显式 complete 收口；既有任务另有验收责任约定时按其约定执行。
 
+任务需要独立审查者检查交付时，先判断检查条件是否已经清楚。已清楚的任务在开工前绑定一份或多份 RR，并启用任务 `.auto-review`；图的 `.auto-review enable` 是一次扫描，补齐 RR 或新增任务后可再扫描。若需要先看执行报告才能确定检查条件，任务普通完成后由主控确定 RR 并手动 `.review start`。两条路径都会进入 `pending_review`，由审查者通过 `.review finish` 给出 pass/reject/blocked；执行者提交后结束本轮职责。主控根据审查报告和异常再判断修复、补充环境或调整计划。操作边界见 [独立审查](../../references/review.md)。
+
 ### 获取通知，或把状态交给人审阅
 
 希望任务结果唤回 Desktop 主控时，可主动订阅：
@@ -119,7 +121,7 @@ CLI 'graph[<图ID>].task[<ID>].content' attach --path docs/tasks/details.md --su
 CLI 'graph[<图ID>].watch' add --thread <当前主控Desktop UUID> --cwd "<项目根目录>" --json
 ```
 
-它覆盖图及子图未来的 pass/reject。可从 CODEX_THREAD_ID/CODEX_SESSION_ID 核实当前会话 UUID；显式注册后才发送。同图同会话重复注册幂等。`'graph[<图ID>].watch' status` 查询投递，`'graph[<图ID>].watch' remove --thread <UUID>` 取消。
+它覆盖图及子图未来的 pass/reject，以及独立审查的 blocked、异常退出和超时提醒。可从 CODEX_THREAD_ID/CODEX_SESSION_ID 核实当前会话 UUID；显式注册后才发送。同图同会话重复注册幂等。`'graph[<图ID>].watch' status` 查询投递，`'graph[<图ID>].watch' remove --thread <UUID>` 取消。
 
 通知进入后续 turn，忙碌主控需要结束当前 turn 才能消费；accepted 表示队列接收。收到通知后查看当前任务和必要证据，继续原有授权内的判断。版本适用范围与投递恢复见 [动态工作流参考](../../references/dynamic-workflow.md)。
 

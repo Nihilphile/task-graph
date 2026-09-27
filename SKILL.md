@@ -16,7 +16,7 @@ description: >-
 
 ## 资源地址与命令发现
 
-优先使用 `CLI 'graph[G-001].task[T-0012]' <动作>`；只知道任务 ID 时可用 `task[T-0012]`。任务材料集合包括 `.content`、`.review-requirement`、`.review`、`.auto-review`、`.reference`、`.report`、`.log`、`.handoff`、`.output`，依赖集合为 `.dependency`。子图任务可沿 `.subgraph.task[T-0002]` 寻址。地址中的归属会被校验；ID 使用实际返回值。
+优先使用 `CLI 'graph[G-001].task[T-0012]' <动作>`；只知道任务 ID 时可用 `task[T-0012]`。任务材料集合包括 `.content`、`.review-requirement`、`.reference`、`.report`、`.log`、`.handoff`、`.output`，依赖集合为 `.dependency`；独立审查使用任务的 `.auto-review`、`.review` 和图的 `.auto-review`。子图任务可沿 `.subgraph.task[T-0002]` 寻址。地址中的归属会被校验；ID 使用实际返回值。
 
 用 `CLI . describe` 发现入口，`CLI graph list` 找到图，`CLI '<资源地址>' describe` 查看操作和条件。所有调用带项目 `--cwd`；结构化输出加 `--json`。CLI 是 `node "<工具目录>/dist/src/cli.js"` 的缩写。
 
@@ -34,7 +34,7 @@ description: >-
 - **交接（handoff）**：默认提供任务事实及文件索引，按需显式展开正文；保存快照时冻结当前要求并保留附件索引。
 - **参考（reference）**：任务提供给后继 Agent 的代码索引或接入说明。文件由产出任务登记，后继沿直接依赖读取；与同一任务接续执行的 handoff 分开。
 
-Task Graph 的普通施工由主控通过所在环境派工。启用自动审查或手动启动 review 后，工具通过 codex exec 启动独立审查者、记录运行与异常，并通过已有订阅返回结果；审查用法见 [独立审查](references/review.md)。
+Task Graph 的普通施工由主控通过所在环境派工。启用自动审查或手动启动 review 后，工具通过 codex exec 启动独立审查者并监控运行；主控已注册 graph watch 时，审查结论或异常会进入通知队列。审查用法见 [独立审查](references/review.md)。
 
 ## 1. 找到入口与目标项目
 
@@ -166,9 +166,9 @@ CLI 'task[T-0001]' complete --report doc/reports/implementation.md --log "验证
 CLI 'task[T-0001]' show --cwd "<项目根目录>" --json
 ```
 
-`--report` 可重复传入多份报告。报告快照、工作记录、完成状态和结束领取在同一事务中保存。工具检查状态与图约束；报告内容是否满足业务要求由负责验收的人或 Agent 判断。复合任务的完成目标全部完成后，还需显式 complete 父任务。
+`--report` 可重复传入多份报告。报告快照、工作记录、状态变更和结束领取在同一事务中保存。已启用 auto-review 的任务进入 `pending_review`，由独立审查者决定结果；普通任务按既有完成规则进入 `done`。工具检查状态与图约束；报告内容是否满足业务要求由负责验收的人或 Agent 判断。复合任务的完成目标全部完成后，还需显式 complete 父任务。
 
-独立验收任务创建时加 `--kind acceptance`，依赖必要实现并纳入父任务完成目标。通过使用 `'task[<ID>]' complete --result pass --report <报告>`，失败用 `'task[<ID>]' reject --report <报告>`；两者均须提供本轮报告。reject 保留证据、释放领取，并继续阻塞后继与父任务。修复后显式 reopen 复验；动态验收任务先由主控重新 refine。
+普通独立验收任务创建时加 `--kind acceptance`，依赖必要实现并纳入父任务完成目标。通过使用 `'task[<ID>]' complete --result pass --report <报告>`，失败用 `'task[<ID>]' reject --report <报告>`；两者均须提供本轮报告。reject 保留证据、释放领取，并继续阻塞后继与父任务。修复后显式 reopen 复验；动态验收任务先由主控重新 refine。
 
 如果已有其他执行者领取，先核查其进展，需要接替时使用 `'task[T-0001]' reassign`；领取不会自动过期。遇到外部阻塞，使用 `'task[T-0001]' block` 记录原因，解除时用 `'task[T-0001]' unblock`。详细参数通过 `CLI help "命令名"` 查看。
 
@@ -195,7 +195,7 @@ CLI . build --cwd "<项目根目录>" --json
 
 ### 可选：Desktop 结果通知
 
-主控主动执行 `'graph[<图ID>].watch' add --thread <自己的Desktop UUID>` 后，该图及子图后续 pass/reject 自动排入通知队列；没有注册就不发送。`'graph[<图ID>].watch' status` 查看结果，`'graph[<图ID>].watch' remove --thread <UUID>` 停止未来发送。所有命令仍需 --cwd，重复注册幂等，不回放过去结果。
+主控主动执行 `'graph[<图ID>].watch' add --thread <自己的Desktop UUID>` 后，该图及子图后续 pass/reject，以及独立审查的 blocked、异常退出和超时提醒会进入通知队列；没有注册就不发送。`'graph[<图ID>].watch' status` 查看结果，`'graph[<图ID>].watch' remove --thread <UUID>` 停止未来发送。所有命令仍需 --cwd，重复注册幂等，不回放过去结果。
 
 通知进入后续 turn；忙碌主控需要结束当前 turn 才能消费。accepted 只表示 Desktop queue 接收；uncertain 不盲目自动重发。通知不会自动 refine、派工或扩大授权。投递失败不撤销已保存的任务结果；恢复及当前版本适用范围见动态工作流参考。
 
@@ -271,7 +271,7 @@ CLI graph add --title "功能交付" --entry --gh --cwd "<项目根目录>" --js
 | `task list` | 从源文件列出任务、状态、就绪状态与阻塞原因；支持 `--json` 和筛选 |
 | `task show` | 默认查看事实和文件清单；按类别/路径显式展开，支持预览体量与路径排除 |
 | `task start` | 将 `todo` 改为 `in_progress`；已完成任务须显式重新打开 |
-| `task complete` | 完成任务并结束领取；可同时附加报告和记录；复合任务须满足完成目标 |
+| `task complete` | 提交交付并结束领取；已启用自动审查时进入 pending_review，普通任务进入 done；复合任务须满足完成目标 |
 | `task reject` | 保存验收未通过结果和报告，释放领取但不满足依赖 |
 | `task cancel` | 取消 `todo` 或 `in_progress` 任务；`cancelled` 为终态 |
 | `task reopen` | 显式将 `done` 或 `reject` 任务重新打开为 `in_progress` |

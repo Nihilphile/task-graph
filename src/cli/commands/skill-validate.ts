@@ -12,7 +12,7 @@ export function skillValidateCommand(): CommandSpec {
     details: [
       'Checks the SKILL.md frontmatter, the explicit $task-graph trigger and the documented command table.',
       'Every documented command must exist in this CLI and every registered command must be documented.',
-      'agents/openai.yaml must match the skill name and keep the agent-management capabilities disabled.',
+      'agents/openai.yaml must match the skill name and declare review execution/failure detection; stale-claim release and automatic retry/rescheduling remain disabled.',
     ],
     run(ctx: CliContext, args): number {
       const root = args.opt('root') ?? defaultSkillRoot();

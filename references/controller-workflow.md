@@ -296,4 +296,4 @@ CLI 'task[T-0012].output' set-audience --path doc/reports/tool-feedback.md --aud
 
 ## 独立审查
 
-新增 `.review-requirement` 多文件标签与 task/graph 的 `.auto-review`，手动启动使用 `task[ID].review start`。自动提交和手动审查都进入 pending_review，由 review finish 保存本轮报告及 pass/reject/blocked 结论。配置、现场验证、restart 和订阅语义见 [独立审查](review.md)。
+需独立审查时，主控为任务绑定 RR 并选择自动或完成后的手动启动；审查者以 `.review finish` 交卷。按 [独立审查](review.md) 核对开启条件、固定材料、异常恢复和通知范围。

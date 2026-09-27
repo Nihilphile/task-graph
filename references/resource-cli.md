@@ -40,6 +40,7 @@ CLI 'graph[G-001].task[T-0012]' start --help --json
 | `graph[G-001].task` | add、list、describe |
 | `graph[G-001].task[T-0012]` | show、revise、refine、unrefine、start、complete、reject、cancel、reopen、claim、release、reassign、link、unlink、block、unblock、attach-subgraph、set-completion、expose-gate、describe |
 | `…task[T-0012].content` | list、attach、remove、describe |
+| `…task[T-0012].review-requirement` | list、attach、remove、describe |
 | `…task[T-0012].reference` / `.report` | list、attach、describe |
 | `…task[T-0012].log` | list、add、attach、describe |
 | `…task[T-0012].handoff` | list、attach、create、describe |
@@ -48,6 +49,9 @@ CLI 'graph[G-001].task[T-0012]' start --help --json
 | `…task[T-0012].subgraph` | show、describe |
 | `…task[T-0012].subgraph.task` | add、list、describe |
 | `graph[G-001].watch` | add、remove、status、flush、retry、describe |
+| `…task[T-0012].auto-review` | enable、disable、status、describe |
+| `…task[T-0012].review` | configure、start、finish、restart、status、recover、describe |
+| `graph[G-001].auto-review` | enable、status、describe |
 
 表中的省略号代表完整图地址。附件集合当前按文件路径绑定、移除，通过 list 返回的 `read_path` 读取；未引入 `.report[序号]`。`task list` 保留为跨图查询，`task add --from` 保留为跨图批量创建入口。`source add`、`github sync`、`skill validate` 保持原语法，也支持对应集合的 describe。
 
@@ -108,4 +112,4 @@ add 需要主控显式注册实际 Desktop UUID；status 只读。恢复投递�
 
 ## 独立审查
 
-新增 `.review-requirement` 多文件标签与 task/graph 的 `.auto-review`，手动启动使用 `task[ID].review start`。自动提交和手动审查都进入 pending_review，由 review finish 保存本轮报告及 pass/reject/blocked 结论。配置、现场验证、restart 和订阅语义见 [独立审查](review.md)。
+审查资源沿用完整图地址或 `task[T-0012]` 简写；RR 支持多份，图 `.auto-review enable` 只扫描一次。自动提交及已完成任务的手动 `.review start` 都进入 `pending_review`。启动条件、审查者交卷和异常恢复见 [独立审查](review.md)。

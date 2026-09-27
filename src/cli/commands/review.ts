@@ -12,12 +12,13 @@ function config(args: ParsedArgs): Partial<ReviewConfig> {
   if (args.has('timeout-minutes')) value['timeoutMinutes'] = Number(args.opt('timeout-minutes'));
   validateConfig(value as Partial<ReviewConfig>); return value as Partial<ReviewConfig>;
 }
-const CONFIG_FLAGS = '[--model <model>] [--reasoning low|medium|high|xhigh] [--mode snapshot|live] [--executable <absolute-path>] [--timeout-minutes <number>]';
+const RUN_FLAGS = '[--model <model>] [--reasoning low|medium|high|xhigh] [--executable <absolute-path>] [--timeout-minutes <number>]';
+const CONFIG_FLAGS = `${RUN_FLAGS} [--mode snapshot|live]`;
 export function reviewCommands(): CommandSpec[] {
   return [
     ...(['start', 'restart', 'finish', 'status', 'recover', 'configure'] as const).map((action): CommandSpec => ({
       name: `task review ${action}`, summary: `${action} an independent task review`,
-      usage: `task-graph task review ${action} T-NNNN ${action === 'finish' ? '--review-id <UUID> --result pass|reject|blocked --report <file>' : ['start', 'restart', 'configure'].includes(action) ? CONFIG_FLAGS : ''} [--cwd <dir>] [--json]`,
+      usage: `task-graph task review ${action} T-NNNN ${action === 'finish' ? '--review-id <UUID> --result pass|reject|blocked --report <file>' : action === 'restart' ? RUN_FLAGS : ['start', 'configure'].includes(action) ? CONFIG_FLAGS : ''} [--cwd <dir>] [--json]`,
       details: ['Manual start requires a completed task and valid review-requirement files; it reopens the acceptance gate.', 'Configuration priority: this invocation > task > project defaults > gpt-6-sol/xhigh. Different tasks run independently.', 'Restart only failed/blocked runs after old processes exit; it preserves delivery and requirement snapshots. finish is round-checked and idempotent.'],
       run(ctx, args) {
         const root = resolveCwd(ctx, args), id = args.positionals[0];

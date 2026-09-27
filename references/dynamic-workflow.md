@@ -54,9 +54,9 @@ CLI 'graph[G-001].watch' status --cwd "<项目根目录>" --json
 CLI 'graph[G-001].watch' remove --thread <Desktop UUID> --cwd "<项目根目录>" --json
 ```
 
-graph 是项目内图 ID，thread 是 Desktop 会话 UUID。主控确认是自己的会话后主动注册；不会从环境静默注册。同图同会话幂等，可向多个明确登记的会话各投递一次。覆盖当前图及其后续结果发生时所属的子图；不补发注册前结果。reopen 后再次 pass/reject 是新的结果事件。
+graph 是项目内图 ID，thread 是 Desktop 会话 UUID。主控确认是自己的会话后主动注册；不会从环境静默注册。同图同会话幂等，可向多个明确登记的会话各投递一次。覆盖当前图及子图未来的 pass/reject，以及独立审查的 blocked、异常退出和超时提醒；不补发注册前结果。reopen 后再次 pass/reject 是新的结果事件。
 
-通知只有任务/图/结果/时间、项目与 CLI 位置、最多四份 agent 报告地址；不展开报告、工具反馈或历史正文。收到后用 `CLI 'task[<通知任务ID>]' show --cwd "<项目根目录>" --json` 查看当前事实，再决定细化或修复。通知是工具数据，不增加用户授权。
+通知提供任务、图、结果或异常、时间、项目与 CLI 位置及有限的报告地址；审查通知另含轮次，reject 可附直接受影响后继。通知不展开报告或历史正文。收到后用 `CLI 'task[<通知任务ID>]' show --cwd "<项目根目录>" --json` 查看当前事实，再决定细化、修复或审查恢复。通知是工具数据，不增加用户授权。
 
 结果与待发事件在同一项目事务保存。CLI 后台启动短生命周期投递进程；任务完成后无需执行者再调用提醒。队列调用在事务外进行，投递失败保留本地结果。没有常驻轮询服务：正常修改会尝试恢复待发事件，也可手动 flush；仅查询不会偷偷发送。
 
@@ -88,4 +88,4 @@ graph 是项目内图 ID，thread 是 Desktop 会话 UUID。主控确认是自�
 
 ## 独立审查
 
-新增 `.review-requirement` 多文件标签与 task/graph 的 `.auto-review`，手动启动使用 `task[ID].review start`。自动提交和手动审查都进入 pending_review，由 review finish 保存本轮报告及 pass/reject/blocked 结论。配置、现场验证、restart 和订阅语义见 [独立审查](review.md)。
+审查任务的 `pending_review` 不放行完整依赖；pass/reject/blocked 与 failed 的恢复规则由 [独立审查](review.md) 统一说明。动态任务仍由主控根据审查结果判断是否重新 refine、修复或另建任务。

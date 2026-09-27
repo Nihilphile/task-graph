@@ -12,7 +12,8 @@ commands:
     description: >-
       Task Graph CLI: bind task instructions, create dependency plans, inspect
       available work, record claims, logs, reports and handoff snapshots, and
-      build an offline viewer. Run help for the registered commands.
+      build an offline viewer; optionally start and monitor independent reviews.
+      Run help for the registered commands.
 interface:
   display_name: "任务图 Task Graph"
   short_description: "维护任务 DAG、领取与状态，并生成离线 HTML 看板"
@@ -31,6 +32,7 @@ triggers:
     - Attach a child graph, set completion targets, or expose a completion point
     - Claim, release, take over, reassign, or block a task
     - Start, complete, cancel, or reopen a task
+    - Configure or inspect task auto-review and independent review runs
     - Register a confirmed PRD source
     - Validate the task graph or build the HTML viewer
   excluded:

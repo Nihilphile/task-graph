@@ -4,7 +4,7 @@
 
 ## 资源地址 CLI
 
-优先使用 `CLI 'graph[G-001].task[T-0012]' <动作>`；只知道任务 ID 时可用 `task[T-0012]`。图中的任务集合是 `graph[G-001].task`，材料集合包括 `.content`、`.reference`、`.report`、`.log`、`.handoff`、`.output`，依赖集合是 `.dependency`。子图任务可用 `graph[G-001].task[T-0001].subgraph.task[T-0002]`。地址中的归属会被校验；ID 使用实际返回值。
+优先使用 `CLI 'graph[G-001].task[T-0012]' <动作>`；只知道任务 ID 时可用 `task[T-0012]`。图中的任务集合是 `graph[G-001].task`，材料集合包括 `.content`、`.review-requirement`、`.reference`、`.report`、`.log`、`.handoff`、`.output`，依赖集合是 `.dependency`；独立审查使用任务的 `.auto-review`、`.review` 和图的 `.auto-review`。子图任务可用 `graph[G-001].task[T-0001].subgraph.task[T-0002]`。地址中的归属会被校验；ID 使用实际返回值。
 
 用 `CLI . describe` 发现入口，`CLI graph list` 找到图，`CLI '<资源地址>' describe` 查看操作和条件。所有调用带项目 `--cwd`；结构化输出加 `--json`。CLI 是 `node "<工具目录>/dist/src/cli.js"` 的缩写。
 
@@ -75,15 +75,16 @@ node dist/src/cli.js 'graph[G-001]' publish --repo owner/repo --cwd /path/to/pro
 - [Agent 使用流程](SKILL.md)：首次接手、创建、派工、交付与错误处理。
 - [主控接口参考](references/controller-workflow.md)：批量计划、稳定 key、子图、局部完成点及附件快照。
 - [动态工作流与 Desktop watch](references/dynamic-workflow.md)：多文件 Content、refine、pass/reject 和通知恢复。
+- [独立审查](references/review.md)：RR、自动/手动启动、审查结论和异常恢复。
 
 ```sh
 npm test
 node dist/src/cli.js skill validate --json
 ```
 
-测试使用隔离的临时项目；GitHub 同步测试使用模拟接口，不向真实仓库发布 issue。工具记录 Agent 的领取与状态，Agent 的启动和调度由主控所在环境负责。
+测试使用隔离的临时项目；GitHub 同步测试使用模拟接口，不向真实仓库发布 issue。普通任务由主控所在环境派工；显式启用自动审查或手动启动 review 时，工具会启动并监控独立审查者。
 
 
 ## 独立审查
 
-新增 `.review-requirement` 多文件标签与 task/graph 的 `.auto-review`，手动启动使用 `task[ID].review start`。自动提交和手动审查都进入 pending_review，由 review finish 保存本轮报告及 pass/reject/blocked 结论。配置、现场验证、restart 和订阅语义见 [独立审查](references/review.md)。
+任务可绑定多份 `.review-requirement`。为任务启用 `.auto-review`，或通过图的一次性扫描开启后，执行者 complete 会进入 `pending_review` 并触发审查；主控也可在普通任务完成后调用 `'task[T-0001].review' start`。审查者通过 `.review finish` 提交 pass/reject/blocked；用法与通知范围见 [独立审查](references/review.md)。
