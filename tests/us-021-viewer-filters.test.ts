@@ -97,17 +97,15 @@ test('US-021: nodes filter by persisted status and computed readiness', async (t
 
   setChecked(page, page.document.querySelector('[data-status-filter="todo"]')!, true);
   assert.deepEqual(nodeIds(page).sort(), [
-    ids.blocked,
     ids.composite,
     ids.convergence,
     ids.ready,
   ].sort());
   // Edges to filtered-out nodes disappear with them.
   assert.deepEqual(edgePairs(page), [
-    `${ids.blocked}->${ids.convergence}`,
     `${ids.ready}->${ids.convergence}`,
   ]);
-  assert.ok((page.document.getElementById('filter-summary')!.textContent ?? '').includes('4/7'));
+  assert.ok((page.document.getElementById('filter-summary')!.textContent ?? '').includes('3/7'));
 
   setChecked(page, page.document.querySelector('[data-status-filter="todo"]')!, false);
   setChecked(page, page.document.querySelector('[data-readiness-filter="blocked"]')!, true);
@@ -152,7 +150,7 @@ test('US-021: the active filters are shared by every graph in the session', asyn
   t.after(() => page.close());
 
   setChecked(page, page.document.querySelector('[data-status-filter="todo"]')!, true);
-  assert.equal(taskNodes(page).length, 4);
+  assert.equal(taskNodes(page).length, 3);
 
   // The filter survives a graph switch: the child task is already done.
   drillInto(page, ids.composite);

@@ -85,6 +85,7 @@ export function addGraph(root: string, options: AddGraphOptions): AddGraphResult
 
       if (!entry && parentTask !== undefined) {
         const parent = readTaskDocument(root, parentTask);
+        if (parent.status === 'pending_review' || parent.blockedFrom === 'pending_review') throw new TaskGraphError('E_REVIEW_ACTIVE', 'Requirements are fixed during review');
         if (parent.subgraph) {
           throw new TaskGraphError(
             'E_TASK_SUBGRAPH',

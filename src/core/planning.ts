@@ -95,6 +95,7 @@ export function addPlannedTasks(root: string, inputs: readonly PlannedTask[]): {
         ...(compact ? { summary: title, body: input.goal !== undefined || input.completionConditions?.length || input.workLog?.length ? document.body : `# ${title}\n` } : {}),
         ...(content ? { content } : {}),
         ...(input.key ? { key: input.key.trim(), creationFingerprint: fingerprints.get(id)! } : {}),
+        ...(input.manualBlockers?.length ? { status: 'blocked' as const, blockedFrom: 'todo' as const } : {}),
         dependsOn: dependencies, manualBlockers: [...(input.manualBlockers ?? [])], derivedFrom: [...(input.derivedFrom ?? [])],
         history: [historyEntry('created', timestampOf(input.now), input.actor ?? null, { graph })],
       };

@@ -91,3 +91,7 @@ graph 是项目内图 ID，thread 是 Desktop 会话 UUID。主控确认是自�
 ## 独立审查
 
 审查任务的 `pending_review` 不放行完整依赖；pass/reject/blocked 与 failed 的恢复规则由 [独立审查](review.md) 统一说明。动态任务仍由主控根据审查结果判断是否重新 refine、修复或另建任务。
+
+## 显式受阻状态
+
+`task block --reason` 将 todo/in_progress/reject 任务置为 `blocked`，保存 `blocked_from` 和原因，领取保留；移除最后一个原因后恢复原阶段。仅因前置依赖未完成的待办仍为 todo，readiness=blocked。旧文件的人工阻塞在读取时兼容显示为 blocked，下次修改该任务时写入新格式；只读查询和 build 不重写源文件。独立审查 blocked/failed 使用 review restart 恢复到 pending_review，不能用普通 unblock 或 complete 绕过。

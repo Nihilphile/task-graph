@@ -7,7 +7,7 @@ import { computeReadiness, type BlockedReason, type Readiness } from './readines
 import { loadTaskRepository } from './repo.js';
 import type { TaskClaim, TaskOutput, TaskSubgraph, TaskDependency } from './task.js';
 import { taskDocuments, type TaskDocuments } from './documents.js';
-import type { TaskHistoryEntry } from './task.js';
+import type { TaskDocument, TaskHistoryEntry } from './task.js';
 import { referenceDocuments } from './task-context.js';
 import { githubTargets, planGitHub } from './github-plan.js';
 import { githubView, readGitHubState, type GitHubView, type GitHubState } from './github-state.js';
@@ -32,6 +32,7 @@ export interface ProjectedTask {
   readonly documents?: TaskDocuments;
   readonly history?: readonly TaskHistoryEntry[];
   readonly status: string;
+  readonly blockedFrom?: TaskDocument['blockedFrom'];
   readonly planningState?: string;
   readonly review?: ReturnType<typeof reviewView>;
   readonly kind?: string;
@@ -130,6 +131,7 @@ export function createGraphProjection(root: string): GraphProjection {
     history: task.history,
     review: reviewView(root, task.id),
     status: task.status,
+      blockedFrom: task.blockedFrom,
     planningState: readiness.get(task.id)?.planningState ?? 'static',
     kind: task.kind ?? 'work',
     claim: task.claim,

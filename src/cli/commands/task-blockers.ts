@@ -12,10 +12,11 @@ export function taskBlockerCommands(): readonly CommandSpec[] {
 function blockCommand(): CommandSpec {
   return {
     name: 'task block',
-    summary: 'Add a manual blocker that the DAG cannot express',
+    summary: 'Set status blocked and record an external obstacle',
     usage: 'task-graph task block T-NNNN --reason <text> [--cwd <dir>] [--json]',
     details: [
       'Use manual blockers only for external obstacles such as a pending approval.',
+      'Preserves the previous phase and claim. Removing the last reason restores that phase; review blocks use review restart.',
       'Readiness and blocked_by stay computed values and are never written to the task file.',
     ],
     run(ctx: CliContext, args): number {
@@ -74,7 +75,7 @@ function report(
   if (args.flag('json')) {
     ctx.io.out(
       JSON.stringify(
-        { ok: true, task: { id: task.id, manualBlockers: task.manualBlockers } },
+        { ok: true, task: { id: task.id, status: task.status, blockedFrom: task.blockedFrom, manualBlockers: task.manualBlockers } },
         null,
         2,
       ),

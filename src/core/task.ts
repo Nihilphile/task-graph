@@ -5,7 +5,7 @@ import { projectPaths, taskFileName, relativePath } from './layout.js';
 import { isTimestamp } from './time.js';
 import { isPlainObject, parseYamlDocument, stringifyYamlDocument } from './yaml-io.js';
 
-export const TASK_STATUSES = ['todo', 'in_progress', 'pending_review', 'done', 'reject', 'cancelled'] as const;
+export const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'pending_review', 'done', 'reject', 'cancelled'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 export const TASK_ID_PATTERN = /^T-\d{4,}$/;
@@ -23,6 +23,7 @@ export const TASK_FRONTMATTER_FIELDS = [
   'creation_fingerprint',
   'graph',
   'status',
+  'blocked_from',
   'planning',
   'kind',
   'refinement',
@@ -99,6 +100,7 @@ export interface TaskDocument {
   readonly creationFingerprint?: string;
   readonly graph: string;
   readonly status: TaskStatus;
+  readonly blockedFrom?: 'todo' | 'in_progress' | 'reject' | 'pending_review';
   readonly claim: TaskClaim | null;
   readonly dependsOn: readonly TaskDependency[];
   readonly manualBlockers: readonly string[];
@@ -190,7 +192,11 @@ function readTaskFields(
       [`Supported statuses: ${TASK_STATUSES.join(', ')}`],
     );
   }
-  const status = rawStatus as TaskStatus;
+  const manualBlockers = readStringArray(value['manual_blockers'], source, 'manual_blockers');
+  const legacyBlocked = manualBlockers.length > 0 && ['todo', 'in_progress', 'reject'].includes(rawStatus);
+  const status = legacyBlocked ? 'blocked' : rawStatus as TaskStatus;
+  const blockedFrom = legacyBlocked ? rawStatus : value['blocked_from'] ?? (status === 'blocked' ? 'todo' : undefined);
+  if (blockedFrom !== undefined && (!['todo', 'in_progress', 'reject', 'pending_review'].includes(String(blockedFrom)) || status !== 'blocked')) throw new TaskGraphError('E_TASK_STATUS', `${source}: blocked_from requires a blocked task and a resumable phase`);
   if (value['planning'] !== undefined && !['static', 'dynamic'].includes(String(value['planning']))) throw new TaskGraphError('E_TASK_FORMAT', 'planning must be static or dynamic');
   if (value['kind'] !== undefined && !['work', 'acceptance', 'decision'].includes(String(value['kind']))) throw new TaskGraphError('E_TASK_FORMAT', 'kind must be work, acceptance or decision');
   const refinement = value['refinement'];
@@ -204,12 +210,13 @@ function readTaskFields(
     ...(value['creation_fingerprint'] === undefined ? {} : { creationFingerprint: readOptionalString(value['creation_fingerprint'], source, 'creation_fingerprint') }),
     graph,
     status,
+    ...(blockedFrom === undefined ? {} : { blockedFrom: blockedFrom as TaskDocument['blockedFrom'] }),
     ...(value['planning'] === undefined ? {} : { planning: value['planning'] as TaskDocument['planning'] }),
     ...(value['kind'] === undefined ? {} : { kind: value['kind'] as TaskDocument['kind'] }),
     ...(refinement === undefined ? {} : { refinement: refinement as TaskDocument['refinement'] }),
     claim: readClaim(value['claim'], source),
     dependsOn: readDependencies(value['depends_on'], source),
-    manualBlockers: readStringArray(value['manual_blockers'], source, 'manual_blockers'),
+    manualBlockers,
     subgraph: readSubgraph(value['subgraph'], source),
     supersedes: readStringArray(value['supersedes'], source, 'supersedes'),
     derivedFrom: readStringArray(value['derived_from'], source, 'derived_from'),
@@ -625,6 +632,7 @@ export function serializeTaskDocument(document: TaskDocument): string {
     ...(document.creationFingerprint === undefined ? {} : { creation_fingerprint: document.creationFingerprint }),
     graph: document.graph,
     status: document.status,
+    ...(document.blockedFrom === undefined ? {} : { blocked_from: document.blockedFrom }),
     ...(document.planning === undefined ? {} : { planning: document.planning }),
     ...(document.kind === undefined ? {} : { kind: document.kind }),
     ...(document.refinement === undefined ? {} : { refinement: document.refinement }),
@@ -731,6 +739,7 @@ export function createTaskDocument(options: {
     id: options.id,
     graph: options.graph,
     status: options.status ?? NEW_TASK_STATUS,
+    ...(options.status === 'blocked' ? { blockedFrom: 'todo' as const } : {}),
     claim: null,
     dependsOn: [],
     manualBlockers: [],

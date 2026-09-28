@@ -85,6 +85,7 @@ export function readinessFor(
   for (const text of task.manualBlockers) {
     blockedBy.push({ kind: 'manual', text });
   }
+  if (task.status === 'blocked' && !task.manualBlockers.length) blockedBy.push({ kind: 'manual', text: task.blockedFrom === 'pending_review' ? '审查受阻；查看报告或运行错误后使用 review restart' : '任务已阻塞；解除阻塞后继续' });
 
   return { readiness: blockedBy.length === 0 ? 'ready' : 'blocked', blockedBy };
 }

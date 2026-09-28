@@ -97,11 +97,11 @@ test('manual review reopens acceptance without rolling back running successors; 
   startReview(w.root, { id: 'T-0001', config: { model: 'custom' } });
   const old = w.run(); w.running(); w.write(old.reportPath, '# blocked\n环境缺失');
   finishReview(w.root, { id: 'T-0001', reviewId: old.id, result: 'blocked', report: old.reportPath });
-  assert.equal(w.task().status, 'pending_review'); assert.equal(loadTaskRepository(w.root).taskById(successor)!.status, 'in_progress');
+  assert.equal(w.task().status, 'blocked'); assert.equal(w.task().blockedFrom, 'pending_review'); assert.equal(loadTaskRepository(w.root).taskById(successor)!.status, 'in_progress');
   restartReview(w.root, 'T-0001'); assert.notEqual(w.run().id, old.id); assert.deepEqual(w.run().delivery, old.delivery); assert.deepEqual(w.run().materials, old.materials);
   assert.throws(() => finishReview(w.root, { id: 'T-0001', reviewId: old.id, result: 'pass', report: old.reportPath }), /no longer current/);
   w.running(); w.write(w.run().reportPath, '# reject\n证据不符合 RR');
-  finishReview(w.root, { id: 'T-0001', reviewId: w.run().id, result: 'reject', report: w.run().reportPath });
+  finishReview(w.root, { id: 'T-0001', reviewId: w.run().id, result: 'reject', report: w.run().reportPath, errorReport: w.run().reportPath });
   assert.equal(w.task().status, 'reject');
 });
 
@@ -123,7 +123,7 @@ test('Git dirty and untracked delivery bytes are frozen; live source changes pre
   live.write('answer.txt', 'changed'); live.write(live.run().reportPath, '# 环境变化');
   const opts = { id: 'T-0001', reviewId: live.run().id, report: live.run().reportPath };
   assert.throws(() => finishReview(live.root, { ...opts, result: 'pass' }), /changed/);
-  finishReview(live.root, { ...opts, result: 'blocked' }); assert.equal(live.task().status, 'pending_review');
+  finishReview(live.root, { ...opts, result: 'blocked' }); assert.equal(live.task().status, 'blocked');
 });
 
 test('dead worker recovery warns once, refuses live process restart and cancels obsolete review notifications', async t => {
@@ -142,7 +142,7 @@ test('real subprocess exit without finish is failed, with durable log and model 
   startTask(w.root, { id: 'T-0001' }); completeTask(w.root, { id: 'T-0001' });
   startReview(w.root, { id: 'T-0001', config: { executable: path.join(w.root, 'fake.cjs') } });
   await executeReview(w.root, w.run().id);
-  assert.equal(w.run().state, 'failed'); assert.equal(w.task().status, 'pending_review'); assert.equal(w.run().sessionId, 'fixture-id');
+  assert.equal(w.run().state, 'failed'); assert.equal(w.task().status, 'blocked'); assert.equal(w.run().sessionId, 'fixture-id');
   assert.match(w.read(w.run().log), /gpt-6-sol/); assert.match(w.read(w.run().log), /xhigh/); assert.match(w.run().error!, /without review finish/);
 });
 
@@ -164,7 +164,7 @@ test('interrupted result transaction becomes a recoverable failure rather than a
   finishReview(w.root, { id: 'T-0001', reviewId: w.run().id, result: 'pass', report: w.run().reportPath });
   w.write('.task-graph/tasks/T-0001.md', pending); // simulate interruption before task history persisted
   recoverReviews(w.root);
-  assert.equal(w.task().status, 'pending_review'); assert.equal(w.run().state, 'failed'); assert.ok(w.run().report);
+  assert.equal(w.task().status, 'blocked'); assert.equal(w.run().state, 'failed'); assert.ok(w.run().report);
   restartReview(w.root, 'T-0001'); assert.equal(w.run().state, 'queued');
 });
 

@@ -101,7 +101,7 @@ function buildFixture(workspace: TempWorkspace): Fixture {
     sessionId: 'thread-1',
     now: fixedClock(),
   });
-  addManualBlocker(workspace.root, { id: successor.id, reason: '等待设计稿' });
+  addManualBlocker(workspace.root, { id: successor.id, reason: '等待设计稿', now: fixedClock() });
   const extra = addTask(workspace.root, { graph: 'G-001', title: '发布公告', now: fixedClock() });
   linkTask(workspace.root, { successor: extra.id, predecessor: successor.id });
   completeTask(workspace.root, {
@@ -143,7 +143,7 @@ test('US-016: build writes the full deterministic projection', () => {
 
   const successor = data.tasks.find((task) => task.id === fixture.successor)!;
   assert.equal(successor.graph, 'G-001');
-  assert.equal(successor.status, 'todo');
+  assert.equal(successor.status, 'blocked');
   assert.deepEqual(successor.claim, {
     role: 'implementer',
     sessionId: 'thread-1',

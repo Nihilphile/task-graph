@@ -19,7 +19,7 @@ function listCommand(): CommandSpec {
   return {
     name: 'task list',
     summary: 'List current tasks and computed readiness',
-    usage: 'task-graph task list [--available | --needs-refinement] [--graph G-NNN] [--status todo|in_progress|pending_review|done|reject|cancelled] [--readiness ready|blocked] [--cwd <dir>] [--json]',
+    usage: 'task-graph task list [--available | --needs-refinement] [--graph G-NNN] [--status todo|in_progress|blocked|pending_review|done|reject|cancelled] [--readiness ready|blocked] [--cwd <dir>] [--json]',
     details: ['Reads source files and computes readiness; generated graph.json does not need to be current.'],
     run(ctx, args): number {
       const root = resolveCwd(ctx, args);
@@ -36,7 +36,7 @@ function listCommand(): CommandSpec {
       const status = args.opt('status');
       const graph = args.opt('graph');
       const readiness = args.opt('readiness');
-      if (status && !['todo', 'in_progress', 'pending_review', 'done', 'reject', 'cancelled'].includes(status)) {
+      if (status && !['todo', 'in_progress', 'blocked', 'pending_review', 'done', 'reject', 'cancelled'].includes(status)) {
         throw usageError(`Unsupported status "${status}"`);
       }
       if (readiness && !['ready', 'blocked'].includes(readiness)) {
@@ -100,7 +100,7 @@ function showCommand(): CommandSpec {
       const withBody = (file: typeof context.content) => !args.flag('handoff')
         ? result.documents.find(d => d.kind === file.kind && d.source_task === file.source_task && d.read_path === file.read_path && d.section === file.section) ?? file : file;
       const task = { id, graph: source.graph, title: source.title, summary: source.summary, contentPath: context.content.path,
-        review: reviewView(root, id), status: source.status, claim: source.claim, dependsOn: source.dependsOn, subgraph: source.subgraph,
+        review: reviewView(root, id), status: source.status, blockedFrom: source.blockedFrom, claim: source.claim, dependsOn: source.dependsOn, subgraph: source.subgraph,
         planning: source.planning ?? 'static', planningState: state.planningState ?? 'static', refinement: source.refinement, kind: source.kind ?? 'work', result: source.status === 'done' ? 'pass' : source.status === 'reject' ? 'reject' : null,
         manualBlockers: source.manualBlockers, supersedes: source.supersedes, derivedFrom: source.derivedFrom,
         outputs: source.outputs.filter(o => contextFiles(context).some(f => f.source_task === id && f.path === o.path && f.sha256 === o.sha256)),

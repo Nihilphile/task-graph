@@ -29,7 +29,7 @@ description: >-
 - **任务（task）**：一项可交付工作，自动分配 ID，例如 `T-0001`。摘要显示在节点上，完整要求放在你编写的 Markdown 文件中。
 - **图（graph）**：一组任务及它们的关系，自动分配 ID，例如 `G-001`。入口图是浏览起点；某个任务下面的细分工作放在子图中，该任务称为复合任务。
 - **依赖（depends_on）**：例如 B 依赖 A，表示 A 完成后 B 才能开始。一个任务可依赖多个前置任务，所有依赖都满足才就绪。工具拒绝循环依赖。
-- **状态与就绪**：`status` 是已记录的 todo（待开始）、in_progress（执行中）、pending_review（待审查）、done（通过/完成）、reject（未通过）、cancelled（取消）；`readiness` 综合依赖、人工阻塞和动态任务的细化门槛计算 ready 或 blocked。ready 本身不表示任务待执行。
+- **状态与就绪**：`status` 是已记录的 todo（待开始）、in_progress（执行中）、blocked（受阻）、pending_review（待审查）、done（通过/完成）、reject（未通过）、cancelled（取消）；`readiness` 综合依赖、人工阻塞和动态任务的细化门槛计算 ready 或 blocked。ready 本身不表示任务待执行。
 - **领取（claim）**：记录由哪个角色、哪个实际 Agent 会话负责。领取本身不启动 Agent。
 - **交接（handoff）**：默认提供任务事实及文件索引，按需显式展开正文；保存快照时冻结当前要求并保留附件索引。
 - **参考（reference）**：任务提供给后继 Agent 的代码索引或接入说明。文件由产出任务登记，后继沿直接依赖读取；与同一任务接续执行的 handoff 分开。
@@ -170,7 +170,7 @@ CLI 'task[T-0001]' show --cwd "<项目根目录>" --json
 
 普通独立验收任务创建时加 `--kind acceptance`，依赖必要实现并纳入父任务完成目标。通过使用 `'task[<ID>]' complete --result pass --report <报告>`，失败用 `'task[<ID>]' reject --report <报告> --error-report <失败小报告.md>`；两者均须提供本轮报告。reject 保留证据、释放领取，并继续阻塞后继与父任务。修复后显式 reopen 复验；动态验收任务先由主控重新 refine。
 
-如果已有其他执行者领取，先核查其进展，需要接替时使用 `'task[T-0001]' reassign`；领取不会自动过期。遇到外部阻塞，使用 `'task[T-0001]' block` 记录原因，解除时用 `'task[T-0001]' unblock`。详细参数通过 `CLI help "命令名"` 查看。
+如果已有其他执行者领取，先核查其进展，需要接替时使用 `'task[T-0001]' reassign`；领取不会自动过期。遇到外部阻塞，使用 `'task[T-0001]' block --reason <原因>` 进入 blocked，保留领取与原阶段；用 unblock 移除最后一个原因后恢复原阶段。审查受阻使用 review restart 恢复。详细参数通过 `CLI help "命令名"` 查看。
 
 ## 5. 阅读与交付 HTML
 
@@ -275,15 +275,15 @@ CLI graph add --title "功能交付" --entry --gh --cwd "<项目根目录>" --js
 | `task start` | 将 `todo` 改为 `in_progress`；已完成任务须显式重新打开 |
 | `task complete` | 提交交付并结束领取；已启用自动审查时进入 pending_review，普通任务进入 done；复合任务须满足完成目标 |
 | `task reject` | 保存验收未通过结果和报告，释放领取但不满足依赖 |
-| `task cancel` | 取消 `todo` 或 `in_progress` 任务；`cancelled` 为终态 |
+| `task cancel` | 取消 `todo`、`in_progress` 或人工 `blocked` 任务；`cancelled` 为终态 |
 | `task reopen` | 显式将 `done` 或 `reject` 任务重新打开为 `in_progress` |
 | `task claim` | 记录领取角色、`session_id` 和 `claimed_at` |
 | `task release` | 显式清除当前领取 |
 | `task reassign` | 重派或通过 `--takeover` 接管任务，并保留领取历史 |
 | `task link` | 建立完全依赖；用 `--gate` 建立指向复合任务完成点的部分依赖 |
 | `task unlink` | 移除指定依赖 |
-| `task block` | 添加无法由 DAG 表达的人工阻塞原因 |
-| `task unblock` | 移除一个人工阻塞原因 |
+| `task block` | 保存 blocked 状态与人工阻塞原因，保留原阶段和领取 |
+| `task unblock` | 移除一个人工阻塞原因；最后一个移除后恢复原阶段 |
 | `task attach-subgraph` | 将已注册的非入口图附加到任务 |
 | `task set-completion` | 设置复合任务的完成目标 |
 | `task expose-gate` | 公开供部分依赖使用的命名完成点 |

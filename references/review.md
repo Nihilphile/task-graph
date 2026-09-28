@@ -65,7 +65,7 @@ Unity 等需要现场的任务显式配置 `--mode live`。工具记录现场文
 CLI 'task[T-0001].review' finish --review-id <本轮UUID> --result pass --report <项目相对报告路径> --cwd <项目> --json
 ```
 
-result 可为 pass / reject / blocked。pass 将任务置为 done；reject 保持依赖阻塞；缺环境、材料或判据时 blocked，保持 pending_review 并通知主控。空报告不接受；每轮报告和快照保留。重复提交相同报告与结果幂等，旧轮次不能改写新轮次。
+result 可为 pass / reject / blocked。pass 将任务置为 done；reject 保持依赖阻塞；缺环境、材料或判据时 blocked，将任务设为 `blocked` 并通知主控；补齐后使用 review restart 回到 pending_review。reject 还必须传 `--error-report <Markdown文件>`，写明失败、失败模式及原因或改进，和结论一起追加到 [error-book](error-book.md)。验收报告已有简短复盘时两参数可指同一文件；pass/blocked 不传 error-report。空报告不接受；每轮报告和快照保留。重复提交相同报告与结果幂等，旧轮次不能改写新轮次。
 
 有效结果以 `.review finish` 成功为准，进程退出码和聊天结语不替代交卷。报告、状态和通知事件在同一次项目事务中保存；现有文件事务仍需在进程/系统中断后核验持久状态。
 
@@ -77,7 +77,7 @@ CLI 'task[T-0001].review' recover --cwd <项目> --json
 CLI 'task[T-0001].review' restart --cwd <项目> --json
 ```
 
-后台执行器隐藏启动，分别监控每个审查进程。进程退出而没有 finish 时记录 failed 并告警；先成功 finish 后异常退出则保留结论，记录运行异常。状态包含轮次、会话 ID、日志与错误地址。
+后台执行器隐藏启动，分别监控每个审查进程。进程退出而没有 finish 时记录 failed，将任务设为 blocked 并告警；先成功 finish 后异常退出则保留结论，记录运行异常。状态包含轮次、会话 ID、日志与错误地址。
 
 执行器或机器整体退出后，下一次修改命令会重新启动监控；可用 recover 主动核对死进程。restart 只用于 failed/blocked 且旧进程已退出的情况，创建新轮次并保留同一交付/RR。仍可能存活的旧进程会阻止重启；先核查日志和进程。本版不自动重试，也不提供系统开机自启动服务。
 

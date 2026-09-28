@@ -50,7 +50,7 @@ export function refineTask(root: string, options: ClockOptions & { id: string; r
 }
 
 export function assertPlanMutable(current: TaskDocument, next: TaskDocument): void {
-  if (current.planning !== 'dynamic' || current.status !== 'in_progress') return;
+  if (current.planning !== 'dynamic' || (current.status !== 'in_progress' && current.blockedFrom !== 'in_progress')) return;
   if (JSON.stringify(contentBindings(current)) !== JSON.stringify(contentBindings(next)) || JSON.stringify(current.dependsOn) !== JSON.stringify(next.dependsOn) || current.title !== next.title || current.body.replace(/^##[ \t]+工作记录[\s\S]*$/m, '') !== next.body.replace(/^##[ \t]+工作记录[\s\S]*$/m, '')) {
     throw new TaskGraphError('E_ACTIVE_PLAN', 'This dynamic task is running. Record the scope change and coordinate cancellation/replacement rather than silently editing its requirements or dependencies');
   }

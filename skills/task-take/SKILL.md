@@ -46,9 +46,9 @@ CLI 'graph[<图ID>].task[<任务ID>].log' add --text "接手检查：已读任�
 
 发现缺口就通过 `.log add` 记录：缺少什么、影响什么、需要什么信息及由谁补充。可继续推进时，先做不依赖该信息的部分。
 
-确实无法继续时，同时执行 `'task[<任务ID>]' block --reason "<缺口与解除条件>"`，让主控能从任务列表发现阻塞；必要时使用所在调度环境的求助机制。日志与 block 本身不会主动唤醒主控。
+确实无法继续时，同时执行 `'task[<任务ID>]' block --reason "<缺口与解除条件>"`，状态变为 `blocked`，保留领取和恢复阶段，让主控能从任务列表发现阻塞；必要时使用所在调度环境的求助机制。日志与人工 block 本身不会主动唤醒主控。
 
-信息补齐后，记录结论及依据，用 `'task[<任务ID>]' unblock --reason "<原阻塞原因>"` 解除对应项；在已有授权内继续，无需再申请开工许可。需要扩大范围的决定交由主控处理，其余已授权工作继续。
+信息补齐后，记录结论及依据，用 `'task[<任务ID>]' unblock --reason "<原阻塞原因>"` 解除对应项；最后一项解除后恢复原阶段，在已有授权内继续，无需再申请开工许可。审查造成的 blocked 由主控使用 `.review restart` 恢复，不能用普通 unblock 绕过。需要扩大范围的决定交由主控处理，其余已授权工作继续。
 
 ## 4. 验证、登记 reference、完成
 
@@ -69,7 +69,7 @@ reference 默认跟随当前文件；需要保留固定交付版本时加 --snap
 
 供用户阅读、与任务施工无关的工具反馈等附件，attach 时加 --audience user，避免混入后继上下文。保存的自动 handoff 只冻结本任务要求及附件索引；需交接进展时将关键结论写入工作记录或独立 handoff 文件。
 
-若 `task.review.enabled=true`，complete 返回 `pending_review` 表示已交付，工具已安排独立审查；到此结束本轮执行工作，审查结果以审查者的 `.review finish` 为准。主控已订阅 graph watch 时会收到结果或异常通知，否则可查询任务及 `.review status`。`pending_review` 不要求执行者再次领取或 complete；后续修复按主控的新安排接手。
+执行者始终调用 `complete` 提交交付，由程序决定下一状态。若 `task.review.enabled=true`，complete 返回 `pending_review` 表示已交付，工具已安排独立审查；到此结束本轮执行工作，审查结果以审查者的 `.review finish` 为准。主控已订阅 graph watch 时会收到结果或异常通知，否则可查询任务及 `.review status`。`pending_review` 不要求执行者再次领取或 complete；后续修复按主控的新安排接手。
 
 未启用 auto-review 时，按任务约定的验收责任完成：普通实现任务完成自己的验证后 complete，后续独立验收由对应任务执行，父任务由主控读报告后收口；旧任务明确要求主控验收的，先用 `<任务地址>.report attach` 并记录待验收事项，保留当前状态。中途交接则记录已做、未做、证据及下一步，并用 `<任务地址>.handoff create` 保存交接。
 

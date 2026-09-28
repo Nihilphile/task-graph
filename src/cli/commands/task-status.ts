@@ -62,7 +62,7 @@ const COMMANDS: readonly StatusCommandConfig[] = [
   },
   {
     action: 'cancel',
-    summary: 'Cancel a todo or in_progress task (terminal)',
+    summary: 'Cancel a todo, in_progress or manually blocked task (terminal)',
     verb: 'Cancelled',
     usage:
       'task-graph task cancel T-NNNN [--reason <text>] [--actor <name>] [--cwd <dir>] [--json]',

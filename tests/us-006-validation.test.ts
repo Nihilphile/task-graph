@@ -212,7 +212,7 @@ test('US-006: reports invalid task documents and file naming problems', () => {
     '.task-graph/tasks/T-0001.md',
     serializeTaskDocument(
       createTaskDocument({ id: 'T-0001', graph: 'G-001', title: 'x' }),
-    ).replace('status: todo', 'status: blocked'),
+    ).replace('status: todo', 'status: unsupported'),
   );
   const codes = issueCodes(workspace);
   assert.ok(codes.includes('E_TASK_FILENAME'), codes.join(', '));

@@ -18,7 +18,7 @@ export function reviewCommands(): CommandSpec[] {
   return [
     ...(['start', 'restart', 'finish', 'status', 'recover', 'configure'] as const).map((action): CommandSpec => ({
       name: `task review ${action}`, summary: `${action} an independent task review`,
-      usage: `task-graph task review ${action} T-NNNN ${action === 'finish' ? '--review-id <UUID> --result pass|reject|blocked --report <file>' : action === 'restart' ? RUN_FLAGS : ['start', 'configure'].includes(action) ? CONFIG_FLAGS : ''} [--cwd <dir>] [--json]`,
+      usage: `task-graph task review ${action} T-NNNN ${action === 'finish' ? '--review-id <UUID> --result pass|reject|blocked --report <file> [--error-report <Markdown>]' : action === 'restart' ? RUN_FLAGS : ['start', 'configure'].includes(action) ? CONFIG_FLAGS : ''} [--cwd <dir>] [--json]`,
       details: ['Manual start requires a completed task and valid review-requirement files; it reopens the acceptance gate.', 'Configuration priority: this invocation > task > project defaults > gpt-6-sol/xhigh. Different tasks run independently.', 'Restart only failed/blocked runs after old processes exit; it preserves delivery and requirement snapshots. finish is round-checked and idempotent.'],
       run(ctx, args) {
         const root = resolveCwd(ctx, args), id = args.positionals[0];
@@ -34,7 +34,7 @@ export function reviewCommands(): CommandSpec[] {
         if (action === 'finish') {
           const reviewId = args.opt('review-id'), result = args.opt('result'), report = args.opt('report');
           if (!reviewId || !report || !['pass', 'reject', 'blocked'].includes(result ?? '')) throw usageError('Pass --review-id, --result pass|reject|blocked and --report');
-          finishReview(root, { id, reviewId, report, result: result as 'pass' | 'reject' | 'blocked' });
+          finishReview(root, { id, reviewId, report, result: result as 'pass' | 'reject' | 'blocked', errorReport: args.opt('error-report') });
         }
         const state = readReviewState(root), review = reviewView(root, id);
         ctx.io.out(JSON.stringify({ ok: true, task: { id, status: loadTaskRepository(root).taskById(id)!.status }, review,

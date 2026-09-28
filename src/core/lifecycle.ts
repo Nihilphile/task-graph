@@ -16,6 +16,7 @@ import { computeReadiness, describeReadiness } from './readiness.js';
 export const STATUS_TRANSITIONS: Readonly<Record<TaskStatus, readonly TaskStatus[]>> = {
   todo: ['in_progress', 'cancelled'],
   in_progress: ['done', 'reject', 'cancelled'],
+  blocked: ['cancelled'],
   pending_review: [],
   done: ['in_progress'],
   reject: ['in_progress', 'cancelled'],
@@ -141,6 +142,7 @@ export function transitionTask(
     return {
       ...next,
       status: to,
+      blockedFrom: undefined,
       history: [
         ...next.history,
         historyEntry(event, at, options.actor ?? null, {

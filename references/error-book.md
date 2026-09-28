@@ -1,6 +1,6 @@
 # Error-book（错题本）
 
-Reviewer 每次 reject 前写一份简短 Markdown 复盘，通过 `--error-report <项目相对路径>` 和本轮验收结果一起提交。`reject` 与 `complete --result reject` 均要求这个参数；缺失、空文件或文件不可读时整次操作失败，任务状态和领取保持原样。
+Reviewer 每次 reject 前写一份简短 Markdown 复盘，通过 `--error-report <项目相对路径>` 和本轮验收结果一起提交。普通 `reject`、`complete --result reject` 和独立审查 `.review finish --result reject` 均要求这个参数；缺失、空文件或文件不可读时整次操作失败，任务状态和领取保持原样。
 
 小报告采用自由文本，建议三小段即可：
 
@@ -18,11 +18,12 @@ Reviewer 每次 reject 前写一份简短 Markdown 复盘，通过 `--error-repo
 
 ```text
 CLI 'task[T-0001]' reject --report reports/review.md --error-report reports/error.md --cwd "<项目根目录>" --json
+CLI 'task[T-0001].review' finish --review-id <本轮UUID> --result reject --report reports/review.md --error-report reports/error.md --cwd "<项目根目录>" --json
 CLI 'graph[G-001].errorbook' show --cwd "<项目根目录>" --json
 CLI errorbook list --cwd "<项目根目录>" --json
 ```
 
-本轮验收报告已有简短复盘时，两个参数可以指向同一文件。小报告和验收报告都保存快照；每次成功 reject 追加一条记录，复验通过、重用文件名或重建 HTML 均保留旧记录。重复提交已 reject 的任务会失败；再次验收须显式 reopen。
+本轮验收报告已有简短复盘时，两个参数可以指向同一文件。小报告和验收报告都保存快照；每次成功 reject 追加一条记录，复验通过、重用文件名或重建 HTML 均保留旧记录。普通重复提交已 reject 的任务会失败；再次验收须显式 reopen。独立审查同一轮次、相同结果及两份报告的重复 finish 幂等，不追加记录；旧轮次回写会被拒绝。blocked 和审查进程异常不会写入错题本。
 
 HTML 每张图都有独立 error-book 方块，点击后按时间显示当前图及其子图的小报告，可跳回对应任务。它不参与任务依赖、领取或完成目标。CLI 的 `errorbook` 查看整个项目，`graph[<ID>].errorbook` 查看该图及子图；`list` 返回文件索引，`show` 展开小报告正文。
 

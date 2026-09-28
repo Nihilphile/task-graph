@@ -1,8 +1,8 @@
 import { TaskGraphError } from './errors.js';
-import { mutateTaskDocument } from './mutate.js';
-import type { TaskDocument } from './task.js';
+import { assertNotCancelled, mutateTaskDocument, timestampOf, type ClockOptions } from './mutate.js';
+import { historyEntry, type TaskDocument } from './task.js';
 
-export interface ManualBlockerOptions {
+export interface ManualBlockerOptions extends ClockOptions {
   readonly id: string;
   readonly reason: string;
 }
@@ -11,12 +11,14 @@ export interface ManualBlockerOptions {
  * Adds one manual blocker.
  *
  * Manual blockers record obstacles that cannot be derived from the DAG (for
- * example a missing approval). They are the only blocking state written to the
- * task Markdown; computed readiness and blocked_by never are.
+ * example a missing approval). Store blocked plus the phase to restore;
+ * computed readiness and blocked_by remain derived.
  */
 export function addManualBlocker(root: string, options: ManualBlockerOptions): TaskDocument {
   const reason = readReason(options.reason);
   return mutateTaskDocument(root, options.id, (current) => {
+    assertNotCancelled(current);
+    if (current.status === 'done') throw new TaskGraphError('E_TASK_TRANSITION', 'Reopen completed work before blocking it');
     if (current.manualBlockers.includes(reason)) {
       throw new TaskGraphError(
         'E_DUP_BLOCKER',
@@ -24,7 +26,9 @@ export function addManualBlocker(root: string, options: ManualBlockerOptions): T
         [describeBlockers(current)],
       );
     }
-    return { ...current, manualBlockers: [...current.manualBlockers, reason] };
+    const blockedFrom = current.status === 'blocked' ? current.blockedFrom ?? 'todo' : current.status as 'todo' | 'in_progress' | 'reject';
+    return { ...current, status: 'blocked', blockedFrom, manualBlockers: [...current.manualBlockers, reason],
+      history: [...current.history, historyEntry('blocked', timestampOf(options.now), options.actor ?? null, { from: current.status, to: 'blocked', reason })] };
   });
 }
 
@@ -32,6 +36,7 @@ export function addManualBlocker(root: string, options: ManualBlockerOptions): T
 export function removeManualBlocker(root: string, options: ManualBlockerOptions): TaskDocument {
   const reason = readReason(options.reason);
   return mutateTaskDocument(root, options.id, (current) => {
+    assertNotCancelled(current);
     const index = current.manualBlockers.indexOf(reason);
     if (index < 0) {
       throw new TaskGraphError(
@@ -40,9 +45,14 @@ export function removeManualBlocker(root: string, options: ManualBlockerOptions)
         [describeBlockers(current)],
       );
     }
+    const manualBlockers = current.manualBlockers.filter((_, position) => position !== index);
+    const status = manualBlockers.length ? current.status : current.blockedFrom ?? current.status;
     return {
       ...current,
-      manualBlockers: current.manualBlockers.filter((_, position) => position !== index),
+      status,
+      blockedFrom: manualBlockers.length ? current.blockedFrom : undefined,
+      manualBlockers,
+      history: [...current.history, historyEntry('unblocked', timestampOf(options.now), options.actor ?? null, { from: current.status, to: status, reason })],
     };
   });
 }

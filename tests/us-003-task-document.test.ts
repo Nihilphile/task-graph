@@ -216,17 +216,17 @@ test('US-003: rejects a missing graph ID', () => {
 });
 
 test('US-003: rejects an unsupported status', () => {
-  const source = '---\nid: T-0001\ngraph: G-001\nstatus: blocked\n---\n\n# Title\n';
+  const source = '---\nid: T-0001\ngraph: G-001\nstatus: unsupported\n---\n\n# Title\n';
   assert.throws(
     () => parseTaskDocument(source, 'bad.md'),
     (error: unknown) =>
       error instanceof TaskGraphError &&
       error.code === 'E_TASK_STATUS' &&
-      /blocked/.test(error.message),
+      /unsupported/.test(error.message),
   );
   const blocked = parseTaskDocument(PRD_TASK_EXAMPLE, 'T-0002.md');
   assert.ok(
-    validateTaskDocument({ ...blocked, status: 'blocked' as never }).some(
+    validateTaskDocument({ ...blocked, status: 'unsupported' as never }).some(
       (issue) => issue.code === 'E_TASK_STATUS',
     ),
   );

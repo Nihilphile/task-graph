@@ -22,6 +22,7 @@ export interface ReviewRun {
   createdAt: string; config: ReviewConfig; materials: FrozenFile[]; delivery: Delivery;
   workerPid?: number; childPid?: number; sessionId?: string; startedAt?: string; finishedAt?: string;
   error?: string; report?: FrozenFile; exitCode?: number | null;
+  errorReport?: FrozenFile;
   log: string; prompt: string; reportPath: string;
 }
 export interface ReviewState {

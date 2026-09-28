@@ -33,7 +33,7 @@ export function configureReview(root: string, id: string | undefined, enabled: b
     const state = readReviewState(root);
     if (id) {
       const task = getTask(root, id);
-      if (task.status === 'pending_review') fail('E_REVIEW_ACTIVE', 'Configure review before starting it');
+      if ((task.status === 'pending_review' || task.blockedFrom === 'pending_review')) fail('E_REVIEW_ACTIVE', 'Configure review before starting it');
       if (enabled) requireReviewRequirements(root, task);
       state.tasks[id] = { ...state.tasks[id], enabled: enabled ?? state.tasks[id]?.enabled ?? false, disabled: enabled === undefined ? state.tasks[id]?.disabled : !enabled,
         config: { ...state.tasks[id]?.config, ...config } };
@@ -58,7 +58,7 @@ export function configureGraphReview(root: string, graph: string, recursive: boo
       try { requireReviewRequirements(root, task); }
       catch (e) { results.push({ task: task.id, result: 'invalid_rr', reason: String(e) }); continue; }
       if (state.tasks[task.id]?.enabled) { results.push({ task: task.id, result: 'already_enabled' }); continue; }
-      if (task.status === 'pending_review') { results.push({ task: task.id, result: 'skipped', reason: task.status }); continue; }
+      if ((task.status === 'pending_review' || task.blockedFrom === 'pending_review')) { results.push({ task: task.id, result: 'skipped', reason: task.status }); continue; }
       state.tasks[task.id] = { ...state.tasks[task.id], enabled: true, config: { ...state.tasks[task.id]?.config, ...config } };
       results.push({ task: task.id, result: 'enabled' });
     }
@@ -68,7 +68,7 @@ export function configureGraphReview(root: string, graph: string, recursive: boo
 }
 export function removeReviewRequirement(root: string, id: string, file: string): TaskDocument {
   return mutateTaskDocument(root, id, task => {
-    if (task.status === 'pending_review') fail('E_REVIEW_ACTIVE', 'Review requirements are fixed during review');
+    if ((task.status === 'pending_review' || task.blockedFrom === 'pending_review')) fail('E_REVIEW_ACTIVE', 'Review requirements are fixed during review');
     if (!task.outputs.some(o => o.kind === 'review-requirement' && o.path === file)) fail('E_REVIEW_RR', 'Requirement is not attached');
     const next = { ...task, outputs: task.outputs.filter(o => o.kind !== 'review-requirement' || o.path !== file) };
     if (readReviewState(root).tasks[id]?.enabled) requireReviewRequirements(root, next);
@@ -92,6 +92,7 @@ function promptFor(root: string, task: TaskDocument, run: ReviewRun): string {
     `逐项验证 RR 与明确任务约束，记录实际命令、证据及结果。额外重构或风格建议单列，不构成 reject。保持被审查源码原样，可以运行验证并生成临时产物；缺少环境、材料、判据或现场版本变化时提交 blocked。snapshot 模式是原项目的实际文件副本（包括未提交改动），Git 忽略的依赖与环境不复制；需要依赖时可在审查目录安装，无法验证就报告 blocked。live 模式须记录实际现场环境及占用情况，冲突时报告 blocked。\n\n` +
     `报告写入项目下 ${run.reportPath}，包含每项要求、检查方式、证据、结论、未验证项和实际环境。然后调用下列工具提交，result 为 pass/reject/blocked：\n` +
     `node ${JSON.stringify(cli)} 'task[${task.id}].review' finish --review-id ${run.id} --result <result> --report ${JSON.stringify(run.reportPath)} --cwd ${JSON.stringify(root)} --json\n` +
+    `若 result 为 reject，必须额外传 --error-report <项目相对Markdown路径>，写明失败、失败模式、原因或改进；原因未定时明确待查项。报告已有简短复盘可让 --error-report 与 --report 指向同一文件。工具会将该复盘存入 error-book；pass 和 blocked 不传该参数。\n` +
     `只有该命令返回 ok:true 才算交卷；自然语言最终回答不替代提交。工具报告交付变化时请用 blocked 提交证据；旧轮次失效时停止回写。不要调用普通 complete/reject、启动另一个审查或重启自己。\n`;
 }
 export interface StartReviewOptions extends ClockOptions { id: string; trigger?: 'auto' | 'manual'; config?: Partial<ReviewConfig>; reports?: readonly string[]; log?: string; }
@@ -129,26 +130,33 @@ export function restartReview(root: string, id: string, config: Partial<ReviewCo
   if (config.mode !== undefined) fail('E_REVIEW_CONFIG', 'Restart preserves the delivery mode');
   return mutateTaskDocument(root, id, (task, tx) => {
     const state = readReviewState(root), old = currentReview(state, id);
-    if (task.status !== 'pending_review' || !old || !['failed', 'blocked'].includes(old.state)) fail('E_REVIEW_RESTART', 'Restart only failed or blocked review runs; use review recover to reconcile a dead worker first');
+    if (!['pending_review', 'blocked'].includes(task.status) || !old || !['failed', 'blocked'].includes(old.state)) fail('E_REVIEW_RESTART', 'Restart only failed or blocked review runs; use review recover to reconcile a dead worker first');
     if (processAlive(old.workerPid) || processAlive(old.childPid)) fail('E_REVIEW_RUNNING', 'The previous review process may still be alive; inspect it before restart');
     const newId = randomUUID(), base = `.task-graph/reviews/${newId}`, at = new Date().toISOString();
     const run: ReviewRun = { ...old, id: newId, state: 'queued', config: { ...old.config, ...config }, createdAt: at,
-      workerPid: undefined, childPid: undefined, sessionId: undefined, startedAt: undefined, finishedAt: undefined, error: undefined, report: undefined, exitCode: undefined,
+      workerPid: undefined, childPid: undefined, sessionId: undefined, startedAt: undefined, finishedAt: undefined, error: undefined, report: undefined, errorReport: undefined, exitCode: undefined,
       log: `${base}/events.jsonl`, prompt: `${base}/prompt.md`, reportPath: `${base}/report.md` };
     state.tasks[id]!.current = newId; state.runs.push(run);
     tx.write(run.prompt, promptFor(root, task, run)); writeReviewState(tx, state);
-    return { ...task, history: [...task.history, historyEntry('review_restarted', at, null, { review_id: newId, previous_review: old.id })] };
+    return { ...task, status: 'pending_review', blockedFrom: undefined, history: [...task.history, historyEntry('review_restarted', at, null, { review_id: newId, previous_review: old.id })] };
   });
 }
-export function finishReview(root: string, options: { id: string; reviewId: string; result: 'pass' | 'reject' | 'blocked'; report: string }): TaskDocument {
+export function finishReview(root: string, options: { id: string; reviewId: string; result: 'pass' | 'reject' | 'blocked'; report: string; errorReport?: string }): TaskDocument {
   return mutateTaskDocument(root, options.id, (task, tx) => {
     const state = readReviewState(root), run = currentReview(state, task.id);
     if (!run || run.id !== options.reviewId) fail('E_REVIEW_STALE', 'This review round is no longer current');
     if (!['pass', 'reject', 'blocked'].includes(options.result)) fail('E_REVIEW_RESULT', 'Result must be pass, reject or blocked');
     const bytes = readDocument(root, requireContent(root, options.report));
     if (!bytes.toString('utf8').trim()) fail('E_REVIEW_REPORT', 'Review report must not be empty');
+    if (options.result !== 'reject' && options.errorReport !== undefined) fail('E_ERROR_REPORT', '--error-report is only supported for reject results');
+    let errorBytes: Buffer | undefined;
+    if (options.result === 'reject') {
+      if (!options.errorReport || !/\.(md|markdown)$/i.test(options.errorReport)) fail('E_ERROR_REPORT', 'Reject requires --error-report <Markdown file> with failure, failure mode and cause or improvement');
+      errorBytes = readDocument(root, requireContent(root, options.errorReport));
+      if (!errorBytes.toString('utf8').trim()) fail('E_ERROR_REPORT', 'Error report must not be empty');
+    }
     if (['pass', 'reject', 'blocked'].includes(run.state)) {
-      if (run.state === options.result && run.report?.sha256 === digest(bytes) && run.report.path === options.report) return task;
+      if (run.state === options.result && run.report?.sha256 === digest(bytes) && run.report.path === options.report && (!errorBytes || (run.errorReport?.sha256 === digest(errorBytes) && run.errorReport.path === options.errorReport))) return task;
       fail('E_REVIEW_FINISHED', 'This round has already submitted a different result');
     }
     if (task.status !== 'pending_review' || run.state !== 'running') fail('E_REVIEW_STATE', 'Only the current running review can finish');
@@ -159,13 +167,20 @@ export function finishReview(root: string, options: { id: string; reviewId: stri
     // A per-round canonical report keeps identical reports across rounds distinct and auditable.
     tx.write(run.reportPath, bytes);
     const snapshot = snapshotDocument(tx, options.report, bytes);
+    let errorDetails = {};
+    if (errorBytes && options.errorReport) {
+      const saved = snapshotDocument(tx, options.errorReport, errorBytes);
+      run.errorReport = { path: options.errorReport, read_path: saved.snapshot, sha256: saved.sha256, kind: 'report', source_task: task.id };
+      errorDetails = { error_report: options.errorReport, error_snapshot: saved.snapshot, error_sha256: saved.sha256,
+        error_reviewer_role: 'reviewer', error_reviewer_session: run.sessionId ?? null, error_evidence: [snapshot.snapshot] };
+    }
     run.report = { path: options.report, read_path: snapshot.snapshot, sha256: snapshot.sha256, kind: 'report', source_task: task.id };
     run.state = options.result; run.finishedAt = at;
     writeReviewState(tx, state);
-    const next: TaskDocument = { ...task, status: options.result === 'pass' ? 'done' : options.result === 'reject' ? 'reject' : 'pending_review', claim: null,
+    const next: TaskDocument = { ...task, status: options.result === 'pass' ? 'done' : options.result === 'reject' ? 'reject' : 'blocked', claim: null, blockedFrom: options.result === 'blocked' ? 'pending_review' : undefined,
       outputs: [...task.outputs, { path: run.reportPath, kind: 'report', title: `审查 ${run.id} · ${options.result}`, note: `review:${run.id}`, summary: `审查结论 ${options.result}`, audience: 'agent', addedAt: at, ...snapshot }],
       history: [...task.history, historyEntry(options.result === 'blocked' ? 'review_blocked' : options.result === 'pass' ? 'completed' : 'rejected', at, 'reviewer',
-        { from: task.status, to: options.result === 'pass' ? 'done' : options.result === 'reject' ? 'reject' : 'pending_review', result: options.result, review_id: run.id, report_sha256: snapshot.sha256 })] };
+        { from: task.status, to: options.result === 'pass' ? 'done' : options.result === 'reject' ? 'reject' : 'blocked', result: options.result, review_id: run.id, report_sha256: snapshot.sha256, ...errorDetails })] };
     return next;
   });
 }
@@ -174,7 +189,7 @@ export function failReview(root: string, id: string, reviewId: string, error: st
     const state = readReviewState(root), run = currentReview(state, id);
     if (task.status !== 'pending_review' || run?.id !== reviewId || !['queued', 'running'].includes(run.state)) return task;
     run.state = 'failed'; run.error = error; run.finishedAt = new Date().toISOString(); writeReviewState(tx, state);
-    return { ...task, history: [...task.history, historyEntry('review_failed', run.finishedAt, 'executor', { review_id: reviewId, error })] };
+    return { ...task, ...(task.status === 'pending_review' ? { status: 'blocked' as const, blockedFrom: 'pending_review' as const } : {}), history: [...task.history, historyEntry('review_failed', run.finishedAt, 'executor', { review_id: reviewId, error })] };
   });
 }
 /** Updates process metadata only; never declares a business result. */
@@ -199,12 +214,12 @@ export function recoverReviews(root: string, taskId?: string): string[] {
       const result = task.history.some(h => ['completed', 'rejected', 'review_blocked'].includes(h.event) && h.extra['review_id'] === run.id);
       let error: string | undefined;
       if (!started && ['queued', 'running'].includes(run.state)) error = 'Submission interrupted before task history committed. Inspect task status, then submit/start again.';
-      else if (['pass', 'reject', 'blocked'].includes(run.state) && !result && task.status === 'pending_review') error = 'Result transaction interrupted: matching task history missing. Evidence retained; inspect and restart after the old process exits.';
-      else if (run.state === 'running' && !processAlive(run.workerPid) && task.status === 'pending_review') error = processAlive(run.childPid) ? 'Review supervisor exited; child may still be alive. Inspect before restart.' : 'Review process exited without review finish; use task[].review restart';
+      else if (['pass', 'reject', 'blocked'].includes(run.state) && !result && (task.status === 'pending_review' || task.blockedFrom === 'pending_review')) error = 'Result transaction interrupted: matching task history missing. Evidence retained; inspect and restart after the old process exits.';
+      else if (run.state === 'running' && !processAlive(run.workerPid) && (task.status === 'pending_review' || task.blockedFrom === 'pending_review')) error = processAlive(run.childPid) ? 'Review supervisor exited; child may still be alive. Inspect before restart.' : 'Review process exited without review finish; use task[].review restart';
       if (!error) return task;
       run.state = 'failed'; run.error = error; run.finishedAt = new Date().toISOString(); writeReviewState(tx, state);
       recovered.push(run.id);
-      return { ...task, history: [...task.history, historyEntry('review_failed', run.finishedAt, 'executor', { review_id: run.id, error })] };
+      return { ...task, ...(task.status === 'pending_review' ? { status: 'blocked' as const, blockedFrom: 'pending_review' as const } : {}), history: [...task.history, historyEntry('review_failed', run.finishedAt, 'executor', { review_id: run.id, error })] };
     });
   }
   return recovered;

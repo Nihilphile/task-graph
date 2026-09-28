@@ -97,6 +97,7 @@ export function reviseTask(root: string, options: ReviseTaskOptions): TaskDocume
     (transaction) => {
       const repository = loadTaskRepository(root);
       const current = requireTask(repository.taskById(options.id), options.id);
+      if (current.status === 'pending_review' || current.blockedFrom === 'pending_review') throw new TaskGraphError('E_REVIEW_ACTIVE', 'Requirements are fixed during review');
       const next = applyRevision(current, { ...options, title: options.summary ?? options.title,
         ...(options.content === undefined ? {} : { content: requireContent(root, options.content) }) });
       assertPlanMutable(current, next);
@@ -141,10 +142,12 @@ export function replaceTask(root: string, options: ReplaceTaskOptions): {
           ['Cancelled is terminal; create a new task instead.'],
         );
       }
+      if (current.status === 'pending_review' || current.blockedFrom === 'pending_review') throw new TaskGraphError('E_REVIEW_ACTIVE', 'Finish the current review before replacing this task');
 
       const cancelled: TaskDocument = {
         ...current,
         status: 'cancelled',
+        blockedFrom: undefined,
         history: [
           ...current.history,
           historyEntry('cancelled', at, options.actor ?? null, {
