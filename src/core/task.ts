@@ -5,7 +5,7 @@ import { projectPaths, taskFileName, relativePath } from './layout.js';
 import { isTimestamp } from './time.js';
 import { isPlainObject, parseYamlDocument, stringifyYamlDocument } from './yaml-io.js';
 
-export const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'pending_review', 'done', 'reject', 'cancelled'] as const;
+export const TASK_STATUSES = ['todo', 'in_progress', 'blocked', 'pending_review', 'reviewing', 'done', 'reject', 'cancelled'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 export const TASK_ID_PATTERN = /^T-\d{4,}$/;

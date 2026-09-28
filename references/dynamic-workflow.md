@@ -90,7 +90,7 @@ graph 是项目内图 ID，thread 是 Desktop 会话 UUID。主控确认是自�
 
 ## 独立审查
 
-审查任务的 `pending_review` 不放行完整依赖；pass/reject/blocked 与 failed 的恢复规则由 [独立审查](review.md) 统一说明。动态任务仍由主控根据审查结果判断是否重新 refine、修复或另建任务。
+审查任务的 `pending_review`（待启动）和 `reviewing`（审查中）都不放行完整依赖；pass/reject/blocked 与 failed 的恢复规则由 [独立审查](review.md) 统一说明。动态任务仍由主控根据审查结果判断是否重新 refine、修复或另建任务。
 
 ## 显式受阻状态
 

@@ -112,4 +112,4 @@ add 需要主控显式注册实际 Desktop UUID；status 只读。恢复投递�
 
 ## 独立审查
 
-审查资源沿用完整图地址或 `task[T-0012]` 简写；RR 支持多份，图 `.auto-review enable` 只扫描一次。自动提交及已完成任务的手动 `.review start` 都进入 `pending_review`。启动条件、审查者交卷和异常恢复见 [独立审查](review.md)。
+审查资源沿用完整图地址或 `task[T-0012]` 简写；RR 支持多份，图 `.auto-review enable` 只扫描一次。自动提交及已完成任务的手动 `.review start` 都先进入 `pending_review`，确认审查线程启动后转为 `reviewing`。启动条件、审查者交卷和异常恢复见 [独立审查](review.md)。

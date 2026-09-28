@@ -75,6 +75,7 @@ export function addPlannedTasks(root: string, inputs: readonly PlannedTask[]): {
       let parent: TaskDocument | undefined;
       if (input.parentTask) {
         parent = create(resolveId(input.parentTask));
+        if (['pending_review', 'reviewing'].includes(parent.status) || parent.blockedFrom === 'pending_review') throw new TaskGraphError('E_REVIEW_ACTIVE', 'Requirements are fixed during review');
         if (parent.status === 'done' || parent.status === 'cancelled') throw new TaskGraphError('E_TASK_TRANSITION', `Reopen or replace ${parent.id} before adding child work`);
         if (!parent.subgraph) {
           graph = nextGraphId(manifest);

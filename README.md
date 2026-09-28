@@ -91,4 +91,4 @@ node dist/src/cli.js skill validate --json
 
 ## 独立审查
 
-任务可绑定多份 `.review-requirement`。为任务启用 `.auto-review`，或通过图的一次性扫描开启后，执行者 complete 会进入 `pending_review` 并触发审查；主控也可在普通任务完成后调用 `'task[T-0001].review' start`。审查者通过 `.review finish` 提交 pass/reject/blocked；用法与通知范围见 [独立审查](references/review.md)。
+任务可绑定多份 `.review-requirement`。为任务启用 `.auto-review`，或通过图的一次性扫描开启后，执行者 complete 会进入 `pending_review` 并触发审查，确认审查线程启动后自动转为 `reviewing`；主控也可在普通任务完成后调用 `'task[T-0001].review' start`。审查者通过 `.review finish` 提交 pass/reject/blocked；用法与通知范围见 [独立审查](references/review.md)。

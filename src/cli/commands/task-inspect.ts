@@ -19,7 +19,7 @@ function listCommand(): CommandSpec {
   return {
     name: 'task list',
     summary: 'List current tasks and computed readiness',
-    usage: 'task-graph task list [--available | --needs-refinement] [--graph G-NNN] [--status todo|in_progress|blocked|pending_review|done|reject|cancelled] [--readiness ready|blocked] [--cwd <dir>] [--json]',
+    usage: 'task-graph task list [--available | --needs-refinement] [--graph G-NNN] [--status todo|in_progress|blocked|pending_review|reviewing|done|reject|cancelled] [--readiness ready|blocked] [--cwd <dir>] [--json]',
     details: ['Reads source files and computes readiness; generated graph.json does not need to be current.'],
     run(ctx, args): number {
       const root = resolveCwd(ctx, args);
@@ -36,7 +36,7 @@ function listCommand(): CommandSpec {
       const status = args.opt('status');
       const graph = args.opt('graph');
       const readiness = args.opt('readiness');
-      if (status && !['todo', 'in_progress', 'blocked', 'pending_review', 'done', 'reject', 'cancelled'].includes(status)) {
+      if (status && !['todo', 'in_progress', 'blocked', 'pending_review', 'reviewing', 'done', 'reject', 'cancelled'].includes(status)) {
         throw usageError(`Unsupported status "${status}"`);
       }
       if (readiness && !['ready', 'blocked'].includes(readiness)) {

@@ -47,7 +47,7 @@ export function mutateTaskDocument(
       assertPlanMutable(current, next);
       const rr = (t: TaskDocument) => t.outputs.filter(o => o.kind === 'review-requirement');
       if (readReviewState(root).tasks[current.id]?.enabled && JSON.stringify(rr(current)) !== JSON.stringify(rr(next))) requireReviewRequirements(root, next);
-      if ((current.status === 'pending_review' || current.blockedFrom === 'pending_review') && (JSON.stringify(rr(current)) !== JSON.stringify(rr(next)) || JSON.stringify(current.dependsOn) !== JSON.stringify(next.dependsOn) || JSON.stringify(current.subgraph) !== JSON.stringify(next.subgraph) || current.content !== next.content || current.body !== next.body || JSON.stringify(current.outputs.filter(o => o.kind === 'content')) !== JSON.stringify(next.outputs.filter(o => o.kind === 'content')))) throw new TaskGraphError('E_REVIEW_ACTIVE', 'Requirements are fixed during review');
+      if ((['pending_review', 'reviewing'].includes(current.status) || current.blockedFrom === 'pending_review') && (JSON.stringify(rr(current)) !== JSON.stringify(rr(next)) || JSON.stringify(current.dependsOn) !== JSON.stringify(next.dependsOn) || JSON.stringify(current.subgraph) !== JSON.stringify(next.subgraph) || current.content !== next.content || current.body !== next.body || JSON.stringify(current.outputs.filter(o => o.kind === 'content')) !== JSON.stringify(next.outputs.filter(o => o.kind === 'content')))) throw new TaskGraphError('E_REVIEW_ACTIVE', 'Requirements are fixed during review');
       if (next.history.length !== current.history.length && ['review_failed', 'review_warning', 'review_blocked'].includes(next.history.at(-1)!.event)) recordWatchResult(root, next, transaction, next.history.at(-1)!.event === 'review_blocked' ? 'blocked' : 'warning');
       if (current.status !== 'blocked' && next.status === 'blocked' && next.history.at(-1)?.event === 'blocked') recordWatchResult(root, next, transaction, 'blocked');
       if (next.history.length > current.history.length && ['completed', 'rejected'].includes(next.history.at(-1)!.event) && (next.status === 'done' || next.status === 'reject')) recordWatchResult(root, next, transaction);
@@ -69,7 +69,7 @@ export function mutateTaskDocument(
 
 /** Rejects work that is not allowed while a task is cancelled (terminal). */
 export function assertNotCancelled(task: TaskDocument): void {
-  if (task.status === 'pending_review' || task.blockedFrom === 'pending_review') throw new TaskGraphError('E_REVIEW_ACTIVE', 'Task is awaiting review; use task[].review operations');
+  if (['pending_review', 'reviewing'].includes(task.status) || task.blockedFrom === 'pending_review') throw new TaskGraphError('E_REVIEW_ACTIVE', 'Task is awaiting review; use task[].review operations');
   if (task.status !== 'cancelled') return;
   throw new TaskGraphError('E_TASK_TRANSITION', `Task "${task.id}" is cancelled`, [
     'Cancelled is terminal: create a new task or revise the goal instead.',

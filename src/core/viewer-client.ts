@@ -2,8 +2,8 @@ export const VIEWER_JS = String.raw`
 (function () {
   "use strict";
   var DATA = JSON.parse(document.getElementById("graph-data").textContent);
-  var STATUS_ORDER = ["todo", "in_progress", "blocked", "pending_review", "done", "reject", "cancelled"];
-  var STATUS_LABEL = { blocked: "受阻", todo: "Todo", in_progress: "Running", pending_review: "待审查", done: "Finished", reject: "Rejected", cancelled: "Cancelled" };
+  var STATUS_ORDER = ["todo", "in_progress", "blocked", "pending_review", "reviewing", "done", "reject", "cancelled"];
+  var STATUS_LABEL = { blocked: "受阻", todo: "Todo", in_progress: "Running", pending_review: "待审查", reviewing: "审查中", done: "Finished", reject: "Rejected", cancelled: "Cancelled" };
   var STATUS_ICON = { done: "\u2713", in_progress: "\u25cf", cancelled: "\u00d7" };
   var READINESS_ICON = { ready: "\u25b6", blocked: "!" };
   var TARGET_MARKER = "\u25c6";
@@ -43,7 +43,7 @@ export const VIEWER_JS = String.raw`
   };
   var visualState = function (task) {
     if (task.status === 'blocked') return 'blocked';
-    if (task.status === 'pending_review') return 'running';
+    if (task.status === 'pending_review' || task.status === 'reviewing') return 'running';
     if (task.status === 'reject') return 'blocked';
     if (task.status === "cancelled") return "cancelled";
     if (task.status === "done") return "done";
@@ -52,6 +52,7 @@ export const VIEWER_JS = String.raw`
   };
   var nodeIcon = function (task) {
     if (task.status === 'blocked') return '!';
+    if (task.status === 'reviewing') return '◉';
     if (task.status === 'pending_review') return '⌛';
     if (task.status === 'reject') return '\u2717';
     if (task.status === "cancelled") return STATUS_ICON.cancelled;
@@ -486,7 +487,7 @@ export const VIEWER_JS = String.raw`
     badge.textContent = nodeIcon(task);
     group.appendChild(badge);
     var statusLabel = svgEl('text', { class: 'state-label', x: statusRight, y: 23 * s, style: 'font-size:' + 11 * s + 'px', 'text-anchor': 'end' });
-    statusLabel.textContent = { blocked: '受阻', pending_review: '待审查', reject: '未通过', done: '已完成', in_progress: '执行中', cancelled: '已取消', todo: '待开始' }[task.status] || task.status;
+    statusLabel.textContent = { blocked: '受阻', pending_review: '待审查', reviewing: '审查中', reject: '未通过', done: '已完成', in_progress: '执行中', cancelled: '已取消', todo: '待开始' }[task.status] || task.status;
     group.appendChild(statusLabel);
     if (target) {
       var marker = svgEl("text", { class: "target-marker", x: w - 14, y: h - 10, "text-anchor": "middle" });

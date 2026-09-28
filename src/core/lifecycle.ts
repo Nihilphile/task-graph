@@ -18,6 +18,7 @@ export const STATUS_TRANSITIONS: Readonly<Record<TaskStatus, readonly TaskStatus
   in_progress: ['done', 'reject', 'cancelled'],
   blocked: ['cancelled'],
   pending_review: [],
+  reviewing: [],
   done: ['in_progress'],
   reject: ['in_progress', 'cancelled'],
   cancelled: [],

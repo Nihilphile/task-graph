@@ -15,7 +15,7 @@ CLI 'task[T-0001]' start --role implementer --session-id <会话ID> --cwd <项�
 CLI 'task[T-0001]' complete --report docs/reports/implementation.md --cwd <项目> --json
 ```
 
-启用后，complete 提交交付并进入 `pending_review`，释放执行 claim，自动启动审查。它不会提前判为 done；普通 reject 也不能绕过审查入口。执行者提交后结束自己的工作，审查者负责本轮验收。
+启用后，complete 提交交付并进入 `pending_review`，释放执行 claim，自动启动审查。收到 Codex 的 `thread.started` 回执后，程序记录审查会话并自动转为 `reviewing`（审查中）；审查者无需额外操作。它不会提前判为 done；普通 reject 也不能绕过审查入口。执行者提交后结束自己的工作，审查者负责本轮验收。
 
 手动审查适用于未启用自动审查的任务：先按原流程完成任务，主控读完报告再绑定 RR，并执行：
 
@@ -81,6 +81,6 @@ CLI 'task[T-0001].review' restart --cwd <项目> --json
 
 执行器或机器整体退出后，下一次修改命令会重新启动监控；可用 recover 主动核对死进程。restart 只用于 failed/blocked 且旧进程已退出的情况，创建新轮次并保留同一交付/RR。仍可能存活的旧进程会阻止重启；先核查日志和进程。本版不自动重试，也不提供系统开机自启动服务。
 
-已有 graph watch 订阅接收 pass/reject、blocked、未交卷退出和超时通知，无订阅时状态与日志仍可查询。先交卷后异常退出只补记运行异常，不重复发送结果通知。pending_review 本身不发送通过通知。通知带轮次和本轮报告入口；旧轮次未发送的消息在投递前取消。reject 附直接受影响后继，由主控安排修复；不会自动回滚已有工作。
+已有 graph watch 订阅接收 pass/reject、blocked、未交卷退出和超时通知，无订阅时状态与日志仍可查询。先交卷后异常退出只补记运行异常，不重复发送结果通知。pending_review 和 reviewing 都不发送完成通知，正常一轮只在交卷后发送一次结论。通知带轮次和本轮报告入口；旧轮次未发送的消息在投递前取消。reject 附直接受影响后继，由主控安排修复；不会自动回滚已有工作。
 
 运行记录在 `.task-graph/review.json`，提示词、交付副本和运行日志在 `.task-graph/reviews/`；这些含本机目录的运行数据自动忽略 Git。验收报告快照仍由任务记录引用。迁移项目时保留运行数据并处理原项目目录绑定，不能假定活动审查可随 Git checkout 自动迁移。

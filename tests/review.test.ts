@@ -9,7 +9,7 @@ import { initializeProject } from '../src/core/init.js';
 import { useTempWorkspace } from './helpers/temp.js';
 import { attachDocument } from '../src/core/documents.js';
 import { completeTask, startTask } from '../src/core/lifecycle.js';
-import { configureReview, startReview, finishReview, restartReview, failReview, updateRun, recoverReviews } from '../src/core/review.js';
+import { configureReview, startReview, finishReview, restartReview, failReview, updateRun, recoverReviews, markReviewing } from '../src/core/review.js';
 import { readReviewState, currentReview } from '../src/core/review-state.js';
 import { executeReview } from '../src/core/review-runner.js';
 import { watchGraph, readWatchLedger, deliverWatch } from '../src/core/watch.js';
@@ -24,7 +24,7 @@ function fixture(t: TestContext) {
   attachDocument(w.root, { id: 'T-0001', path: 'rr.md', kind: 'review-requirement', summary: '可核实的标准' });
   const run = () => currentReview(readReviewState(w.root), 'T-0001')!;
   const task = () => loadTaskRepository(w.root).taskById('T-0001')!;
-  const running = () => updateRun(w.root, run().id, r => { r.state = 'running'; });
+  const running = () => { updateRun(w.root, run().id, r => { r.state = 'running'; }); markReviewing(w.root,'T-0001',run().id,'fixture-session'); };
   const cli = async (...args: string[]) => {
     const output: string[] = [];
     const code = await main([...args, '--json'], { cwd: w.root, env: { TASK_GRAPH_REVIEW_NO_SPAWN: '1' }, desktopAdapter: adapter, io: { out: s => output.push(s), err: () => {} } });
@@ -80,9 +80,22 @@ test('auto complete submits, releases claim and gates dependencies; finish commi
   assert.throws(() => completeTask(w.root, { id: 'T-0001' }));
   assert.notEqual((await w.cli('task[T-0001]', 'claim', '--role', 'worker', '--session-id', 'wrong')).code, 0);
   w.running(); w.write(w.run().reportPath, '# 验收通过\n读取 answer.txt，值为 42。');
+  assert.equal(w.task().status, 'reviewing'); assert.equal(readWatchLedger(w.root)!.events.length, 0);
+  const runningHistory = w.task().history.length;
+  markReviewing(w.root, 'T-0001', w.run().id, 'fixture-session');
+  assert.equal(w.task().history.length, runningHistory);
+  assert.equal((await w.cli('task', 'list', '--status', 'reviewing')).tasks.length, 1);
+  assert.throws(() => configureReview(w.root, 'T-0001', false, {}), /before starting/);
+  assert.throws(() => attachDocument(w.root, { id: 'T-0001', path: 'answer.txt', kind: 'content' }), /fixed during review/);
+  assert.throws(() => completeTask(w.root, { id: 'T-0001' }));
+  assert.equal(computeReadiness(loadTaskRepository(w.root)).get(successor)!.readiness, 'blocked');
+  const page = await openViewer(w.file('.task-graph/generated/index.html')); t.after(() => page.close());
+  assert.match(taskNode(page,'T-0001').textContent!, /审查中/);
+  assert.ok(page.document.querySelector('[data-status-filter="reviewing"]'));
   const options = { id: 'T-0001', reviewId: w.run().id, result: 'pass' as const, report: w.run().reportPath };
   finishReview(w.root, options); finishReview(w.root, options);
   assert.equal(w.task().status, 'done'); assert.equal(readWatchLedger(w.root)!.events.length, 1);
+  markReviewing(w.root,'T-0001',w.run().id,'fixture-session');assert.equal(w.task().status,'done');
   assert.equal(computeReadiness(loadTaskRepository(w.root)).get(successor)!.readiness, 'ready');
   assert.match(readWatchLedger(w.root)!.events[0]!.message, /review_id/);
   assert.ok(!readWatchLedger(w.root)!.events[0]!.message.includes('implementation.md'));
@@ -143,6 +156,7 @@ test('real subprocess exit without finish is failed, with durable log and model 
   startReview(w.root, { id: 'T-0001', config: { executable: path.join(w.root, 'fake.cjs') } });
   await executeReview(w.root, w.run().id);
   assert.equal(w.run().state, 'failed'); assert.equal(w.task().status, 'blocked'); assert.equal(w.run().sessionId, 'fixture-id');
+  assert.ok(w.task().history.some(h => h.event === 'review_running' && h.extra['session_id'] === 'fixture-id'));
   assert.match(w.read(w.run().log), /gpt-6-sol/); assert.match(w.read(w.run().log), /xhigh/); assert.match(w.run().error!, /without review finish/);
 });
 
@@ -166,6 +180,17 @@ test('interrupted result transaction becomes a recoverable failure rather than a
   recoverReviews(w.root);
   assert.equal(w.task().status, 'blocked'); assert.equal(w.run().state, 'failed'); assert.ok(w.run().report);
   restartReview(w.root, 'T-0001'); assert.equal(w.run().state, 'queued');
+});
+
+test('Recovery adopts a live legacy reviewer without another thread or notification', async t => {
+  const w=fixture(t);await watchGraph(w.root,'G-001','11111111-2222-3333-4444-555555555555',adapter);
+  configureReview(w.root,'T-0001',true,{});startTask(w.root,{id:'T-0001'});completeTask(w.root,{id:'T-0001'});
+  const id=w.run().id;
+  updateRun(w.root,id,r=>{r.state='running';r.sessionId='legacy-session';r.workerPid=process.pid;r.childPid=process.pid;});
+  recoverReviews(w.root);recoverReviews(w.root);
+  assert.equal(w.task().status,'reviewing');assert.equal(w.run().id,id);
+  assert.equal(w.task().history.filter(h=>h.event==='review_running').length,1);
+  assert.equal(readWatchLedger(w.root)!.events.length,0);
 });
 
 test('different tasks execute concurrently while duplicate execution of one round is ignored', async t => {

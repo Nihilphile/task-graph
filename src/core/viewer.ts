@@ -120,6 +120,8 @@ body { margin:0; font:14px/1.5 system-ui,-apple-system,"Segoe UI","Microsoft YaH
 .node.status-in_progress .badge { fill:#f79009; }
 .node.status-blocked .node-body { fill:#fff1f0; stroke:#d92d20; stroke-width:2; }
 .node.status-blocked .badge, .node.status-blocked .state-label { fill:#b42318; }
+.node.status-reviewing .node-body { fill:#eef4ff; stroke:#6172f3; stroke-width:2; }
+.node.status-reviewing .badge, .node.status-reviewing .state-label { fill:#3538cd; }
 .node.status-cancelled .node-body { fill:#f2f4f7; stroke:#98a2b3; }
 .node.status-cancelled .badge { fill:#98a2b3; }
 .node.status-cancelled text.title { text-decoration:line-through; fill:var(--muted); }

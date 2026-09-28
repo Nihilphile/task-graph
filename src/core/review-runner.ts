@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { failReview, processAlive, recoverReviews, updateRun } from './review.js';
+import { failReview, markReviewing, processAlive, recoverReviews, updateRun } from './review.js';
 import { currentReview, readReviewState, type ReviewRun } from './review-state.js';
 import { verifyDelivery } from './review-delivery.js';
 import { kickWatchWorker } from './watch.js';
@@ -133,7 +133,7 @@ export async function executeReview(root: string, reviewId: string): Promise<voi
       for (const line of lines) { try {
         const event = JSON.parse(line);
         if (event.type === 'thread.started' && typeof event.thread_id === 'string') {
-          updateRun(root, run!.id, r => { r.sessionId = event.thread_id; }); sessionSaved = true;
+          markReviewing(root, run!.task, run!.id, event.thread_id); sessionSaved = true;
         }
       } catch { /* non-JSON lines stay in the log */ } }
     });
