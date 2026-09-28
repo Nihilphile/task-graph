@@ -235,6 +235,7 @@ export function taskDocuments(root: string, task: TaskDocument): TaskDocuments {
 }
 
 export interface HandoffOptions extends ContextOptions {
+  readonly detail?: boolean;
   readonly expand?: readonly DocumentKind[];
   readonly expandPaths?: readonly string[];
   readonly preview?: boolean;
@@ -252,7 +253,7 @@ export function agentHandoff(root: string, task: TaskDocument, options: HandoffO
     if (!predecessor) continue;
     lines.push('', `### ${predecessor.id} · ${predecessor.title}`, '', `状态：${predecessor.status}${dependency.gate ? ` · 完成点：${dependency.gate}` : ''}`);
   }
-  lines.push('', '## 当前阻塞', '', JSON.stringify(state?.blockedBy ?? [], null, 2), '', formatTaskContext(context, { portable: true }), '');
+  lines.push('', '## 当前阻塞', '', JSON.stringify(state?.blockedBy ?? [], null, 2), '', formatTaskContext(context, { portable: true, detail: options.detail }), '');
   const key = (s: string) => process.platform === 'win32' ? s.toLowerCase() : s;
   const paths = new Set((options.expandPaths ?? []).map(p => key(documentPath(p))));
   const files = contextFiles(context);

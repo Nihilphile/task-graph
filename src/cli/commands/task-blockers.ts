@@ -16,7 +16,7 @@ function blockCommand(): CommandSpec {
     usage: 'task-graph task block T-NNNN --reason <text> [--cwd <dir>] [--json]',
     details: [
       'Use manual blockers only for external obstacles such as a pending approval.',
-      'Preserves the previous phase and claim. Removing the last reason restores that phase; review blocks use review restart.',
+      'Preserves the previous phase and claim. Removing the last reason restores that phase. start/claim/reassign accepts repair and archives waiting reasons; review restart retries frozen delivery.',
       'Readiness and blocked_by stay computed values and are never written to the task file.',
     ],
     run(ctx: CliContext, args): number {
@@ -37,7 +37,7 @@ function unblockCommand(): CommandSpec {
     usage: 'task-graph task unblock T-NNNN --reason <text> [--cwd <dir>] [--json]',
     details: [
       'The reason must match a stored blocker exactly.',
-      'Removing a blocker is the only way it disappears; nothing expires automatically.',
+      'Unblock resolves a reason; accepting blocked work for repair archives the waiting reasons in history. Nothing expires automatically.',
     ],
     run(ctx: CliContext, args): number {
       const root = resolveCwd(ctx, args);

@@ -1,7 +1,8 @@
-import { watchGraph, unwatchGraph, watchStatus, retryWatchEvent, kickWatchWorker, deliverWatch } from '../../core/watch.js';
+import { watchGraph, unwatchGraph, watchStatus, retryWatchEvent, kickWatchWorker, deliverWatch, readWatchLedger } from '../../core/watch.js';
 import { usageError } from '../../core/errors.js';
 import { resolveCwd } from '../paths.js';
 import { EXIT_OK, type CommandSpec } from '../context.js';
+import { emitResult } from '../output.js';
 
 export function graphWatchCommands(): CommandSpec[] {
   return [{
@@ -24,8 +25,19 @@ export function graphWatchCommands(): CommandSpec[] {
         else if (!ctx.desktopAdapter) kickWatchWorker(root);
       }
       const status = watchStatus(root, graph);
-      if (args.flag('json')) ctx.io.out(JSON.stringify({ ok: true, ...(subscription ? { subscription: { id: subscription.id, graph, thread: subscription.thread } } : {}), ...status }, null, 2));
-      else if (!args.flag('quiet')) ctx.io.out(JSON.stringify(status, null, 2));
+      if (!args.flag('detail')) {
+        if (subscription) emitResult(ctx, args, { ok: true, subscription: { id: subscription.id, graph, thread: subscription.thread, active: subscription.active } });
+        else if (args.has('retry')) {
+          const event = readWatchLedger(root)!.events.find(e => e.id === args.opt('retry'))!;
+          emitResult(ctx, args, { ok: true, graph, event: { id: event.id, state: event.state, ...(event.error ? { error: event.error } : {}) } });
+        } else emitResult(ctx, args, { ok: true, graph,
+          ...(args.flag('status') ? { subscriptions: status.subscriptions.map(s => ({ thread: s.thread, active: s.active })) } : {}),
+          counts: status.counts, delivery: status.delivery, consumption: status.consumption,
+          events: (readWatchLedger(root)?.events ?? []).filter(e => status.subscriptions.some(s => s.id === e.subscription) && ['paused', 'uncertain'].includes(e.state)).map(e => ({ id: e.id, task: e.task, state: e.state, error: e.error,
+            recovery: `graph[${graph}].watch retry ${e.id}${e.state === 'uncertain' ? ' --allow-duplicate (only after checking the target chat)' : ''}` })) });
+        return EXIT_OK;
+      }
+      emitResult(ctx, args, { ok: true, ...(subscription ? { subscription: { id: subscription.id, graph, thread: subscription.thread } } : {}), ...status });
       return EXIT_OK;
     },
   }, {
@@ -36,7 +48,7 @@ export function graphWatchCommands(): CommandSpec[] {
       const root = resolveCwd(ctx, args), graph = args.positionals[0], thread = args.opt('thread');
       if (!graph || !thread) throw usageError('Pass graph ID and --thread UUID');
       unwatchGraph(root, graph, thread);
-      if (args.flag('json')) ctx.io.out(JSON.stringify({ ok: true, ...watchStatus(root, graph) }, null, 2));
+      emitResult(ctx, args, args.flag('detail') ? { ok: true, ...watchStatus(root, graph) } : { ok: true, graph, thread, active: false });
       return EXIT_OK;
     },
   }];

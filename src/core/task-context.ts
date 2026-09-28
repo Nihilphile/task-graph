@@ -119,7 +119,7 @@ export function referenceDocuments(root: string, task: TaskDocument, repository 
   });
 }
 
-export function formatTaskContext(context: TaskContext, options: { portable?: boolean } = {}): string {
+export function formatTaskContext(context: TaskContext, options: { portable?: boolean; detail?: boolean } = {}): string {
   const lines = ['## 接手文件索引', options.portable ? '以下路径均相对于项目根目录。' : `项目根目录：${context.project_root}`, `任务要求：${context.content.read_path}`];
   if (context.content.error) lines.push(`要求文件错误：${context.content.error}`);
   for (const file of context.contents.slice(1)) lines.push(`任务要求：${file.read_path}${file.summary ? ' · ' + file.summary : ''}${file.error ? ' · ' + file.error : ''}${file.excluded ? ' · 已排除' : ''}`);
@@ -130,6 +130,6 @@ export function formatTaskContext(context: TaskContext, options: { portable?: bo
     for (const file of files) lines.push(`- ${kind} · ${file.source_task} · ${file.title}：${file.read_path} (${file.mode})${file.summary ? '\n  ' + file.summary : ''}${file.error ? '\n  错误：' + file.error : ''}`);
   }
   if (context.content.excluded) lines.push(`要求已排除：${context.content.excluded}`);
-  if (context.excluded.length) lines.push(`排除 ${context.excluded.length} 项：`, ...context.excluded.map(o => `- ${o.source_task} · ${o.path} (${o.reason})`));
+  if (context.excluded.length) lines.push(`排除 ${context.excluded.length} 项`, ...(options.detail ? context.excluded.map(o => `- ${o.source_task} · ${o.path} (${o.reason})`) : []));
   return lines.join('\n');
 }

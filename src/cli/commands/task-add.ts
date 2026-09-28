@@ -6,6 +6,7 @@ import path from 'node:path';
 import { addPlannedTasks, readTaskPlan, choice } from '../../core/planning.js';
 import { computeReadiness } from '../../core/readiness.js';
 import { loadTaskRepository } from '../../core/repo.js';
+import { emitResult } from '../output.js';
 
 export function taskAddCommand(): CommandSpec {
   return {
@@ -36,9 +37,9 @@ export function taskAddCommand(): CommandSpec {
         const inputs = plan.map((input) => ({ ...input, graph: input.graph ?? (input.parentTask ? undefined : args.opt('graph')), actor: args.opt('actor'), now: () => ctx.now() }));
         const result = addPlannedTasks(root, inputs);
         const states = computeReadiness(loadTaskRepository(root));
-        const tasks = result.tasks.map((task) => ({ id: task.id, graph: task.graph, summary: task.title, content: task.content ?? null, file: `.task-graph/tasks/${task.id}.md`, ...states.get(task.id) }));
-        if (args.flag('json')) ctx.io.out(JSON.stringify({ ok: true, tasks, keys: result.keys, view: '.task-graph/generated/index.html' }, null, 2));
-        else if (!args.flag('quiet')) ctx.io.out(tasks.map((task) => `${task.id} (${task.readiness}): ${task.summary}`).join('\n'));
+        const tasks = result.tasks.map((task) => ({ id: task.id, graph: task.graph, summary: task.title, status: task.status,
+          ...(args.flag('detail') ? { content: task.content ?? null, file: `.task-graph/tasks/${task.id}.md` } : {}), ...states.get(task.id) }));
+        emitResult(ctx, args, { ok: true, tasks, keys: result.keys, ...(args.flag('detail') ? { view: '.task-graph/generated/index.html' } : {}) });
         return EXIT_OK;
       }
       const title = args.opt('title');
@@ -66,18 +67,14 @@ export function taskAddCommand(): CommandSpec {
         now: () => ctx.now(),
       });
 
-      if (args.flag('json')) {
-        ctx.io.out(
-          JSON.stringify(
-            { ok: true, task: { id: created.id, graph: created.graph, status: created.status, title: created.title,
-              content: created.content ?? null, file: `.task-graph/tasks/${created.id}.md`, ...computeReadiness(loadTaskRepository(root)).get(created.id) }, view: '.task-graph/generated/index.html' },
-            null,
-            2,
-          ),
-        );
-      } else if (!args.flag('quiet')) {
-        ctx.io.out(`Created ${created.id} in ${created.graph}: ${created.title}`);
+      if (!args.flag('detail')) {
+        emitResult(ctx, args, { ok: true, task: { id: created.id, graph: created.graph, status: created.status, title: created.title,
+          ...computeReadiness(loadTaskRepository(root)).get(created.id) } });
+        return EXIT_OK;
       }
+
+      emitResult(ctx, args, { ok: true, task: { id: created.id, graph: created.graph, status: created.status, title: created.title,
+        content: created.content ?? null, file: `.task-graph/tasks/${created.id}.md`, ...computeReadiness(loadTaskRepository(root)).get(created.id) }, view: '.task-graph/generated/index.html' });
       return EXIT_OK;
     },
   };

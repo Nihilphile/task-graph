@@ -293,7 +293,7 @@ test('US-014: a partial dependency becomes satisfied when its gate members are d
     gate: 'api-ready',
   });
 
-  assert.equal(readinessOf(workspace, fixture.successor), 'blocked');
+  assert.equal(readinessOf(workspace, fixture.successor), 'unready');
   assert.deepEqual(
     computeReadiness(loadTaskRepository(workspace.root)).get(fixture.successor)?.blockedBy,
     [{ kind: 'gate', task: 'T-0001', gate: 'api-ready', tasks: [fixture.inner] }],
@@ -316,7 +316,7 @@ test('US-014: a partial dependency becomes satisfied when its gate members are d
     predecessor: 'T-0001',
     gate: 'tests-ready',
   });
-  assert.equal(readinessOf(workspace, other.id), 'blocked');
+  assert.equal(readinessOf(workspace, other.id), 'unready');
   done(workspace, fixture.inner2);
   assert.equal(readinessOf(workspace, other.id), 'ready');
 });
@@ -347,7 +347,7 @@ test('US-014: task expose-gate works through the CLI', () => {
     { cwd: workspace.root },
   );
   assert.equal(link.code, 0, link.stderr);
-  assert.match(link.stdout, /Linked T-0001 -> T-0003/);
+  assert.match(link.stdout, /id: T-0003[\s\S]*action: added[\s\S]*task: T-0001/);
 
   const badGate = runCliProcess(
     ['task', 'link', 'T-0003', '--depends-on', 'T-0001', '--gate', 'nope'],

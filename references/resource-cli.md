@@ -28,7 +28,9 @@ CLI 'graph[G-001].task[T-0012]' describe --cwd "<项目>" --json
 CLI 'graph[G-001].task[T-0012]' start --help --json
 ```
 
-`describe` 列出操作、子地址、用法和条件；实例存在时还返回当前状态、领取和阻塞。不存在的对象仍可查询类型说明，不会初始化或写入项目。类型支持某动作不表示当前状态允许执行，也不表示已取得业务授权；执行时仍检查全部条件。`<地址> --help` 等价于 describe，`<地址> <动作> --help` 查看该动作。
+`describe` 默认列出操作名、简述和子资源名；`describe --detail` 增加用法、条件及当前状态、领取和阻塞。不存在的对象仍可查询类型说明，不会初始化或写入项目。类型支持某动作不表示当前状态允许执行，也不表示已取得业务授权；执行时仍检查全部条件。`<地址> --help` 等价于 describe，`<地址> <动作> --help` 查看该动作。
+
+`task list --readiness unready` 筛选前置依赖或细化门槛未满足的任务；`--status blocked` 筛选执行受阻。blocked 本身不禁止 start，成功接手后进入 in_progress，详情见 [受阻与动态工作流](dynamic-workflow.md#显式受阻状态)。
 
 ## 常用地址与动作
 
@@ -66,7 +68,7 @@ CLI 'graph[G-001].task[T-0012]' start --role worker --session-id ACTUAL_SESSION 
 CLI 'graph[G-001].task[T-0012].log' add "已确认上下文，开始施工" --cwd "<项目>" --json
 ```
 
-例中的 ID 换成实际返回值。新地址命令返回的任务对象包含 `resource`，可直接传给下一次调用；项目入口使用 `graph list` 发现图。`start/show` 保留 context 与 task-take 指引。动态任务、快照、领取和验收的语义与旧命令相同。
+例中的 ID 换成实际返回值。新地址命令返回的任务对象包含 `resource`，可直接传给下一次调用；项目入口使用 `graph list` 发现图。`start/show` 保留 context，task-take 指引由 start/reopen 或 show --detail 返回。动态任务、快照、领取和验收的语义与旧命令相同。
 
 图内批量创建：
 
@@ -91,7 +93,7 @@ CLI 'graph[G-001].task[T-0012].report' attach --path docs/reports/test.md --summ
 
 已有依赖每次 add/remove 一条，创建任务可重复 `--depends-on`。依赖参数接受项目内唯一 task ID，也接受完整地址 `graph[G-002].task[T-0018]`；完整地址会额外校验图归属。跨图仍受原有图边界、完成点和循环校验约束。创建时可附 `:gate`，依赖编辑也可用 `--gate`。
 
-附件 list 复用 agent context 的过滤和来源规则：reference/report 可包括直接依赖的材料，`scope`、`source_task`、`source_resource` 标明来源；content 是本任务的全部要求。响应保留 summary、live/snapshot、read_path 和 project_root，默认没有正文。user 附件与旧版未审核聚合交接保持排除；HTML 中仍可供人阅读。按需展开正文使用任务 show 的 `--expand-path`、`--expand`、`--preview`。
+附件 list 复用 agent context 的过滤和来源规则：reference/report 可包括直接依赖的材料，默认以 `source_task` 标明依赖来源，`--detail` 增加 `scope`、`source_resource` 等元数据；content 是本任务的全部要求。响应保留 summary、live/snapshot、read_path 和 project_root，默认没有正文，不截断文件数量。完整字段规则见 [CLI 输出约定](cli-output.md)。user 附件与旧版未审核聚合交接保持排除；HTML 中仍可供人阅读。按需展开正文使用任务 show 的 `--expand-path`、`--expand`、`--preview`。
 
 ## 通知
 

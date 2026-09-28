@@ -3,7 +3,7 @@ name: task-take
 description: >-
   接手已分配的 task-graph 任务：读取要求和参考、记录上下文确认后自主执行，
   记录缺口、验证并登记报告与后继参考。适用于子代理收到 task ID，
-  或任务的 start/show 返回本 Skill 入口时；任务拆分与细化由主控负责。
+  或任务的 start 或 show --detail 返回本 Skill 入口时；任务拆分与细化由主控负责。
 ---
 
 # Task Take
@@ -20,7 +20,9 @@ description: >-
 CLI 'graph[<图ID>].task[<任务ID>]' show --cwd "<实际项目路径>" --json
 ```
 
-检查 status、claim 和 blockedBy。待开始且就绪的任务，用实际 role/session-id 执行 `'task[<任务ID>]' start`；已由当前会话开始的任务直接继续。领取属于其他会话、任务已结束或存在未解除的开工阻塞时，记录/反馈具体冲突，由主控明确接续安排。start 表示接下任务，接下来完成阅读与接手记录。
+检查 status、claim 和 blockedBy。待开始且就绪的任务，用实际 role/session-id 执行 `'task[<任务ID>]' start`；已由当前会话开始的任务直接继续。领取属于其他会话、任务已结束或 readiness=unready 时，记录/反馈具体冲突，由主控明确接续安排。start 表示接下任务，接下来完成阅读与接手记录。
+
+接手修复 blocked 任务时，先 start（必要时由主控 reassign/takeover），确认 CLI 返回 in_progress 后再施工，不能只读文件、写日志而一直留在 blocked。成功的 claim/reassign 同样会切换状态并给出接手上下文，无须再次 start。读取 repair.previous_blockers 和关联报告；原等待原因已归档，不代表问题已修好。修复后仍无法继续时再次 block，允许使用相同原因，这会通知主控新一轮阻塞。blocked 本身不阻止接手；unready 的依赖/细化门槛仍需先满足。
 
 主控代为 start 时应登记你的实际会话 ID；查询确认领取属于自己后继续。若尚未领取但任务已开始，使用 `'task[<任务ID>]' claim --role <实际角色> --session-id <实际会话ID>` 记录责任人，然后继续。
 
@@ -28,6 +30,7 @@ CLI 'graph[<图ID>].task[<任务ID>]' show --cwd "<实际项目路径>" --json
 
 ## 2. 阅读后记录，再直接开工
 
+- 默认清单的空类别会省略；`--detail` 增加元数据，不展开正文。详见 [CLI 输出约定](../../references/cli-output.md)。
 - 完整读取 context.contents 中的全部要求文件；旧版只有 context.content 时读取该入口。多个文件共同构成当前要求。清单中的 read_path 均相对 context.project_root；固定版本读取快照路径。
 - 读取 context.review_requirements 中的全部验收要求，与 content 的明确约束共同作为交付依据。
 - 浏览 context.references 的 summary 和 source_task，读取任务必需的资料与相关接口/章节。检查 error；summary 是索引，必要内容仍须实际读取。
@@ -48,7 +51,7 @@ CLI 'graph[<图ID>].task[<任务ID>].log' add --text "接手检查：已读任�
 
 确实无法继续时，同时执行 `'task[<任务ID>]' block --reason "<缺口与解除条件>"`，状态变为 `blocked`，保留领取和恢复阶段，让主控能从任务列表发现阻塞；必要时使用所在调度环境的求助机制。主控已订阅所在图时，进入 blocked 会自动通知并带上原因；日志本身不发送通知，未订阅时按所在调度环境求助。
 
-信息补齐后，记录结论及依据，用 `'task[<任务ID>]' unblock --reason "<原阻塞原因>"` 解除对应项；最后一项解除后恢复原阶段，在已有授权内继续，无需再申请开工许可。审查造成的 blocked 由主控使用 `.review restart` 恢复，不能用普通 unblock 绕过。需要扩大范围的决定交由主控处理，其余已授权工作继续。
+信息补齐后，记录结论及依据，用 `'task[<任务ID>]' unblock --reason "<原阻塞原因>"` 解除对应项；最后一项解除后恢复原阶段，在已有授权内继续，无需再申请开工许可。审查造成的 blocked 有两种接续：重审同一交付用 `.review restart`；主控安排修复时用 start/reopen（或 claim/reassign）进入 in_progress，原审查归档，修复后 complete 重新交付。旧 reviewer 尚未退出时，先协调停止或 recover，不能并行改写其验收对象。需要扩大范围的决定交由主控处理，其余已授权工作继续。
 
 ## 4. 验证、登记 reference、完成
 

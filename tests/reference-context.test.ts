@@ -15,7 +15,7 @@ function setup(t: TestContext) {
   initializeProject(w.root, { name: 'References', task: 'Producer' });
   const invoke = async (...args: string[]) => {
     const out: string[] = [], err: string[] = [];
-    const code = await main([...args, '--json'], { cwd: w.root, io: { out: text => out.push(text), err: text => err.push(text) }, githubClient: { request() { throw new Error('Unexpected network'); } } });
+    const code = await main([...args, '--json', '--detail'], { cwd: w.root, io: { out: text => out.push(text), err: text => err.push(text) }, githubClient: { request() { throw new Error('Unexpected network'); } } });
     return { code, payload: JSON.parse(out.join('\n')), error: err.join('\n') };
   };
   const run = async (...args: string[]) => { const result = await invoke(...args); assert.equal(result.code, 0, result.error); return result.payload; };

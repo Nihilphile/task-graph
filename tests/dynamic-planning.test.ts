@@ -43,7 +43,7 @@ test('Dynamic JSON plans support multiple requirements; added prerequisites requ
   const listed = (await run('task', 'list')).tasks;
   const next = listed.find((v: {title: string}) => v.title === 'Replacement');
   assert.ok(next);
-  const replaced = (await run('task', 'show', next.id)).task;
+  const replaced = (await run('task', 'show', next.id, '--detail')).task;
   assert.equal(replaced.planning, 'dynamic'); assert.equal(replaced.kind, 'acceptance');
   assert.notEqual((await run('task', 'start', next.id)).code, 0);
 });
@@ -95,7 +95,7 @@ test('Reject preserves evidence, blocks successors/parent and supports explicit 
   assert.notEqual((await run('task', 'complete', v)).code, 0);
   assert.equal((await run('task', 'reject', v, '--report', 'report.md', '--error-report', 'report.md')).code, 0);
   const rejected = (await run('task', 'show', v)).task;
-  assert.equal(rejected.status, 'reject'); assert.equal(rejected.claim, null);
+  assert.equal(rejected.status, 'reject'); assert.equal(rejected.claim, undefined);
   assert.notEqual((await run('task', 'start', next)).code, 0);
   assert.notEqual((await run('task', 'complete', 'T-0001')).code, 0);
   assert.notEqual((await run('task', 'start', v)).code, 0);

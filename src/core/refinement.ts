@@ -41,7 +41,7 @@ export function refineTask(root: string, options: ClockOptions & { id: string; r
     if (options.reset) return { ...current, planning: 'dynamic', refinement: undefined,
       history: [...current.history, historyEntry('refinement_reset', at, options.actor ?? null, { reason: options.reason })] };
     const state = readinessFor(current, new Map(repo.tasks.map(t => [t.id, t])));
-    if (state.readiness !== 'ready') throw new TaskGraphError('E_TASK_BLOCKED', 'Resolve dependencies and manual blockers before refining');
+    if (state.readiness !== 'ready') throw new TaskGraphError('E_TASK_UNREADY', 'Resolve dependencies and manual blockers before refining');
     for (const o of contentBindings(current)) documentMetadata(root, o.path);
     const next: TaskDocument = { ...current, planning: 'dynamic' };
     const refinement = { at, actor: options.actor ?? null, reason: options.reason.trim(), fingerprint: refinementFingerprint(next, repo) };

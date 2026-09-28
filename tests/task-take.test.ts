@@ -18,14 +18,15 @@ test('Start/show guidance is readable from a different project and stays out of 
   };
   const started = await run('task', 'start', 'T-0001', '--role', 'worker', '--session-id', 'test-worker');
   const guide = started.guidance;
-  assert.equal(guide.skill, 'task-take');
+  assert.ok(guide.skill_path);
   assert.ok(path.isAbsolute(guide.skill_path));
   assert.equal(guide.skill_path, path.join(SKILL_ROOT, 'skills', 'task-take', 'SKILL.md'));
   assert.match(readFileSync(guide.skill_path, 'utf8'), /name: task-take/);
   assert.equal(started.context.project_root, w.root);
   const before = new Map(w.listFiles().map(file => [file, w.readBuffer(file)]));
-  assert.deepEqual((await run('task', 'show', 'T-0001')).guidance, guide);
-  assert.deepEqual((await run('task', 'show', 'T-0001', '--handoff')).guidance, guide);
+  assert.equal((await run('task', 'show', 'T-0001')).guidance, undefined);
+  assert.equal((await run('task', 'show', 'T-0001', '--detail')).guidance.skill_path, guide.skill_path);
+  assert.equal((await run('task', 'show', 'T-0001', '--handoff')).guidance, undefined);
   assert.deepEqual(w.listFiles(), [...before.keys()]);
   for (const [file, bytes] of before) {
     assert.deepEqual(w.readBuffer(file), bytes);

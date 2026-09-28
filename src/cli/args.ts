@@ -27,7 +27,7 @@ const BOOLEAN_OPTIONS: ReadonlySet<string> = new Set([
   'reopen',
   'strict',
   'takeover',
-  'verbose',
+  'verbose', 'detail',
 ]);
 
 export interface ParsedArgs {

@@ -198,9 +198,13 @@ CLI 'task[T-0012].handoff' attach --path doc/handoff/reviewer.md --title "补充
 
 kind 也支持 reference。四类 attach 命令都可传 `--summary "文件内容和用途"`；未传时字段省略，title 默认文件名。`'task[T-0012].handoff' create --summary ...` 为生成的交接登记摘要。正文中的关键章节、符号或阅读场景可直接写在 summary，不需要额外 locator/read_when 字段。
 
+### 受阻后的接手
+
+`readiness=unready` 表示依赖或细化门槛未满足；`status=blocked` 表示执行遇到问题。blocked 本身不阻止接手，start/reopen/claim/reassign 成功后切换到 in_progress，返回 repair（含旧阻塞原因）和接手上下文。旧原因保留历史，当前等待原因清空；修复后仍无法继续，应再次 block，订阅会收到新事件。审查受阻若只重跑原交付，用 review restart；接手修改交付则旧 reviewer 必须已退出，旧轮次证据保留但不能再交卷。
+
 ### 接手文件清单与依赖参考
 
-任务地址的 `start/reopen/show` 的成功响应提供顶层 guidance（skill、skill_path、message）。执行者读取 skill_path 指向的 task-take，按指南写接手记录后自主施工，并在完成前登记后继需要的参考。skill_path 是随 CLI 安装位置解析的绝对路径，与下面相对项目根目录的 context 文件地址不同；不持久化到任务或 handoff。主控已记录开始时，让执行者 show 后继续，避免重复 start。
+任务地址的 `start/reopen` 的成功响应提供精简 guidance（skill_path、message）；`show --detail` 提供完整 guidance。执行者读取 skill_path 指向的 task-take，按指南写接手记录后自主施工，并在完成前登记后继需要的参考。skill_path 是随 CLI 安装位置解析的绝对路径，与下面相对项目根目录的 context 文件地址不同；不持久化到任务或 handoff。主控已记录开始时，让执行者 show 恢复材料后继续，尚未拿到指南入口时用一次 show --detail，避免重复 start。
 
 先写好接入说明，或定位到现有源代码文件，然后登记一次：
 
@@ -216,30 +220,21 @@ CLI 'task[T-0012].reference' attach --path src/reports/types.ts --title "报告�
 ```json
 {
   "project_root": "/project",
-  "content": {
-    "path": "doc/tasks/integration.md",
+  "contents": [{
     "read_path": "doc/tasks/integration.md",
-    "title": "集成验证",
     "summary": "集成验证",
     "mode": "live"
-  },
-  "references": [
-    {
-      "source_task": "T-0012",
-      "scope": "dependency",
-      "path": "doc/references/report-store.md",
-      "read_path": "doc/references/report-store.md",
-      "title": "report-store.md",
-      "summary": "保存接口、错误语义与代码索引",
-      "mode": "live"
-    }
-  ],
-  "handoffs": [],
-  "reports": []
+  }],
+  "references": [{
+    "source_task": "T-0012",
+    "read_path": "doc/references/report-store.md",
+    "summary": "保存接口、错误语义与代码索引",
+    "mode": "live"
+  }]
 }
 ```
 
-两种 path 均相对 project_root。snapshot 条目的 read_path 指向实际快照，另有 sha256；文件不可读时返回 error。自身参考的 scope 为 self。上述 JSON 仅展示核心字段；当前 context 还有 logs、outputs、excluded，文件条目包含 kind、audience、size_bytes。所有清单均无正文；HTML 嵌入受支持文件的预览。
+read_path 相对 project_root，snapshot 指向固定快照，来源与读取路径不同时另有 path。不可读时有 error；默认省略空类别，自身材料不重复 source_task。--detail 增加指纹、大小、完整来源和排除原因，不自动展开正文。标签 list 返回全部可见文件。完整契约见 [CLI 输出约定](cli-output.md)。
 
 reference、report 和普通产物的来源包括自身、直接完全依赖，以及部分依赖的父任务和 gate.requires 成员。日志、handoff 仅取自身。重叠 gate 按来源去重，相同文件由不同任务登记时保留不同来源。不沿祖先递归收集；外部正文链接也不递归展开。
 
@@ -256,7 +251,7 @@ CLI 'task[T-0012]' show --handoff --expand-path doc/reports/implementation.md --
 CLI 'task[T-0012]' show --expand report --exclude-path doc/reports/tool-feedback.md --cwd "<项目根目录>" --json
 ```
 
---expand 可重复选择 content/report/log/reference/handoff/output；--expand-path 可重复选择原始路径或 read_path。--exclude-path 精确匹配项目相对原始路径或快照路径，支持正反斜杠，不支持 glob；排除优先。--manifest 与正文选择互斥。--preview 不读取附件正文，返回 selected_files、selected_bytes、estimated_chars_upper_bound、omitted_count 和 excluded。字符数按 UTF-8 文件字节数与格式开销估计 UTF-16 长度上界，非 token 数；文件变化或读取错误会影响实际结果。
+--expand 可重复选择 content/report/log/reference/handoff/output；--expand-path 可重复选择原始路径或 read_path。--exclude-path 精确匹配项目相对原始路径或快照路径，支持正反斜杠，不支持 glob；排除优先。--manifest 与正文选择互斥。--preview 不读取附件正文，返回 selected_files、selected_bytes、estimated_chars_upper_bound、omitted_count 和 excluded_count（--detail 可查 excluded）。字符数按 UTF-8 文件字节数与格式开销估计 UTF-16 长度上界，非 token 数；文件变化或读取错误会影响实际结果。
 
 用途与类别独立：实现报告和工具反馈都可为 report，但后者可设 audience=user：
 
@@ -265,7 +260,7 @@ CLI 'task[T-0012].report' attach --path doc/reports/tool-feedback.md --audience 
 CLI 'task[T-0012].output' set-audience --path doc/reports/tool-feedback.md --audience user --cwd "<项目根目录>" --json
 ```
 
-四类 attach 均支持 audience，未指定默认 agent；set-audience 更新该来源路径下所有类别/版本的绑定，保留文件和快照。user 附件仍在 HTML 展示，但代理 context、显式展开及新生成 handoff 都排除，仅在 excluded 中保留来源/路径/原因，不复制其摘要。用途不是访问控制或 GitHub 发布开关，已发布的评论不回撤；人工阅读使用 HTML。
+四类 attach 均支持 audience，未指定默认 agent；set-audience 更新该来源路径下所有类别/版本的绑定，保留文件和快照。user 附件仍在 HTML 展示，但代理 context、显式展开及新生成 handoff 都排除，默认仅返回 excluded_count，--detail 在 excluded 中保留来源/路径/原因，不复制其摘要。用途不是访问控制或 GitHub 发布开关，已发布的评论不回撤；人工阅读使用 HTML。
 
 旧自动 handoff（kind=handoff、path=snapshot、无新格式标记）可能已复制被排除的内容，默认以 legacy_aggregate 排除。原快照不改写；审阅确认适合代理后可用 set-audience 标为 agent。新自动 handoff 有 indexed-v1 标记，只冻结本任务要求与过滤后的索引。任意报告、手写 handoff 或任务正文里已经复制的其他资料无法自动追溯用途，需人工整理或标记整个附件；工具也不会自动解析聊天中的路径排除规则。
 

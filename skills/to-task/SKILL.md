@@ -134,7 +134,7 @@ CLI task list --available --cwd "<项目根目录>" --json
 
 交付实际项目路径、CLI 路径、graph ID、任务 key→ID、第一批可开始的任务和 HTML 链接；使用独立 checkout/worktree 时标明应进入的位置。有未决问题或待同步时一并说明。`created.json` 是创建回执，当前状态以查询结果为准。
 
-派工消息提供项目、CLI 路径和完整任务地址（含 graph ID 与 task ID），并要求执行者阅读 start/show 返回的 guidance.skill_path（task-take）。接手、施工和交付流程统一由该指南维护；主控从任务工作记录和附件查询结果。
+派工消息提供项目、CLI 路径和完整任务地址（含 graph ID 与 task ID），并要求执行者阅读 start 返回的 guidance.skill_path（主控已 start 时，可用 show --detail 查询入口）（task-take）。接手、施工和交付流程统一由该指南维护；主控从任务工作记录和附件查询结果。
 
 主控需要了解的协作约定：
 

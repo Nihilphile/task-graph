@@ -1,3 +1,4 @@
+import { documentPath } from '../../core/documents.js';
 import { EXIT_OK, type CliContext, type CommandSpec } from '../context.js';
 import { usageError } from '../../core/errors.js';
 import {
@@ -10,8 +11,10 @@ import {
 } from '../../core/lifecycle.js';
 import type { TaskDocument } from '../../core/task.js';
 import { resolveCwd } from '../paths.js';
-import { taskContext, formatTaskContext } from '../../core/task-context.js';
-import { executionGuidance, formatExecutionGuidance } from '../execution-guidance.js';
+import { taskContext } from '../../core/task-context.js';
+import { executionGuidance } from '../execution-guidance.js';
+import { attachmentView, contextView, emitResult, reviewSummary } from '../output.js';
+import { repairReceipt } from '../../core/repair.js';
 
 interface StatusCommandConfig {
   /** Command action word after `task`, e.g. `start`. */
@@ -33,12 +36,12 @@ const COMMANDS: readonly StatusCommandConfig[] = [
   },
   {
     action: 'start',
-    summary: 'Move a task from todo to in_progress',
+    summary: 'Start ready work or accept a blocked task for repair',
     verb: 'Started',
     usage:
       'task-graph task start T-NNNN [--role <role> --session-id <session>] [--reopen] [--reason <text>] [--actor <name>] [--cwd <dir>] [--json]',
     details: [
-      'Dependencies and manual blockers must be satisfied; a handoff snapshot is saved at start.',
+      'Dependencies and refinement must be satisfied; accepting blocked work archives prior waiting reasons and enters in_progress. A handoff snapshot is saved.',
       'Pass --role and --session-id to claim and start in one transaction.',
       'Returns the task-take skill path: read context, log readiness, then work without a second approval.',
       'A done or reject task only moves back with --reopen. Dynamic tasks also require a current refinement.',
@@ -48,7 +51,7 @@ const COMMANDS: readonly StatusCommandConfig[] = [
   },
   {
     action: 'complete',
-    summary: 'Move a task from in_progress to done',
+    summary: 'Submit work: queue enabled auto-review, otherwise record completion',
     verb: 'Completed',
     usage:
       'task-graph task complete T-NNNN [--result pass|reject] [--report <file>]... [--error-report <file.md>] [--log <text>] [--reason <text>] [--actor <name>] [--cwd <dir>] [--json]',
@@ -77,9 +80,9 @@ const COMMANDS: readonly StatusCommandConfig[] = [
     summary: 'Explicitly reopen a done or rejected task as in_progress',
     verb: 'Reopened',
     usage:
-      'task-graph task reopen T-NNNN [--reason <text>] [--actor <name>] [--cwd <dir>] [--json]',
+      'task-graph task reopen T-NNNN [--role <role> --session-id <session>] [--reason <text>] [--actor <name>] [--cwd <dir>] [--json]',
     details: [
-      'Only a done or reject task can be reopened; cancelled work is never reopened.',
+      'Reopen done/reject work or accept blocked work for repair; cancelled work is never reopened.',
       'The reopen is recorded in history with the actor and timestamp.',
     ],
     run: (root, options) => reopenTask(root, options),
@@ -103,7 +106,7 @@ function statusCommand(config: StatusCommandConfig): CommandSpec {
       if (id === undefined) {
         throw usageError('A task ID is required', [`Usage: ${config.usage}`]);
       }
-      if (config.action !== 'start' && (args.has('role') || args.has('session-id'))) throw usageError('--role and --session-id are supported by task start.');
+      if (!['start', 'reopen'].includes(config.action) && (args.has('role') || args.has('session-id'))) throw usageError('--role and --session-id are supported by task start/reopen.');
       if (!['complete', 'reject'].includes(config.action) && (args.has('report') || args.has('log') || args.has('result'))) throw usageError('--report, --log and --result are supported by task complete/reject.');
       const result = args.opt('result');
       if (result !== undefined && result !== 'pass' && result !== 'reject') throw usageError('--result must be pass or reject');
@@ -123,20 +126,26 @@ function statusCommand(config: StatusCommandConfig): CommandSpec {
         errorReport: args.opt('error-report'),
       });
       const context = config.action === 'start' || config.action === 'reopen' ? taskContext(root, task) : undefined;
+      const repair = repairReceipt(task);
 
-      if (args.flag('json')) {
-        ctx.io.out(
-          JSON.stringify(
-            { ok: true, task: { id: task.id, status: task.status, title: task.title }, ...(context ? { context, guidance } : {}) },
-            null,
-            2,
-          ),
-        );
-      } else if (!args.flag('quiet')) {
-        ctx.io.out(`${config.verb} ${task.id} (${task.status}): ${task.title}`);
-        if (context) ctx.io.out(formatTaskContext(context));
-        if (guidance) ctx.io.out(formatExecutionGuidance(guidance));
+      const reports = args.all('report').map(file => task.outputs.filter(o => o.kind === 'report' && o.path === documentPath(file)).at(-1)).filter(o => o !== undefined);
+      const last = task.history.at(-1);
+      const errorReport = last?.extra['error_snapshot'];
+      if (!args.flag('detail')) {
+        emitResult(ctx, args, { ok: true, task: { id: task.id, status: task.status,
+          ...(context ? { title: task.title, claim: task.claim ? { role: task.claim.role, sessionId: task.claim.sessionId } : null } : {}) },
+          ...(context ? { context: contextView(context), guidance: { skill_path: guidance!.skill_path, message: 'Read task-take, requirements and references; log context readiness, then work.' } } : {}),
+          ...(repair ? { repair } : {}),
+          ...(reports.length ? { reports: reports.map(o => attachmentView(o!)) } : {}),
+          ...(errorReport ? { error_report: { read_path: errorReport } } : {}),
+          ...(task.status === 'pending_review' ? { review: reviewSummary(root, task.id) } : {}) });
+        return EXIT_OK;
       }
+
+      emitResult(ctx, args, { ok: true, task: { id: task.id, status: task.status, title: task.title, claim: task.claim },
+        ...(context ? { context, guidance } : {}), ...(repair ? { repair } : {}),
+        ...(reports.length ? { reports: reports.map(o => attachmentView(o!, true)) } : {}),
+        ...(errorReport ? { error_report: { read_path: errorReport } } : {}), ...(task.status === 'pending_review' ? { review: reviewSummary(root, task.id, true) } : {}) });
       return EXIT_OK;
     },
   };

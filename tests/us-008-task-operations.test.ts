@@ -280,7 +280,7 @@ test('US-008: task add, revise and replace work through the CLI', () => {
     { cwd: workspace.root },
   );
   assert.equal(add.code, 0, add.stderr);
-  assert.match(add.stdout, /Created T-0002 in G-001: 实现登录/);
+  assert.match(add.stdout, /id: T-0002[\s\S]*graph: G-001[\s\S]*title: 实现登录/);
 
   const revise = runCliProcess(['task', 'revise', 'T-0002', '--title', '实现登录能力'], {
     cwd: workspace.root,
@@ -316,7 +316,7 @@ test('US-008: task add, revise and replace work through the CLI', () => {
     cwd: workspace.root,
   });
   assert.equal(placed.code, 0, placed.stderr);
-  assert.match(placed.stdout, /Created T-0004 in G-002: x/);
+  assert.match(placed.stdout, /id: T-0004[\s\S]*graph: G-002[\s\S]*title: x/);
 });
 
 test('US-008: usage errors use the usage exit code', () => {

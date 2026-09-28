@@ -2,6 +2,8 @@ import { EXIT_OK, type CliContext, type CommandSpec } from '../context.js';
 import { usageError } from '../../core/errors.js';
 import { attachSubgraph, exposeCompletionPoint, setCompletionRequires } from '../../core/composites.js';
 import type { TaskDocument } from '../../core/task.js';
+import { emitResult } from '../output.js';
+import type { ParsedArgs } from '../args.js';
 import { resolveCwd } from '../paths.js';
 
 /** The `task attach-subgraph`, `task set-completion` and `task expose-gate` commands. */
@@ -122,19 +124,13 @@ function requireTaskId(args: { positionals: readonly string[] }, usage: string):
 
 function report(
   ctx: CliContext,
-  args: { flag(name: string): boolean },
+  args: ParsedArgs,
   message: string,
   task: TaskDocument,
 ): void {
-  if (args.flag('json')) {
-    ctx.io.out(
-      JSON.stringify(
-        { ok: true, task: { id: task.id, subgraph: task.subgraph } },
-        null,
-        2,
-      ),
-    );
-  } else if (!args.flag('quiet')) {
-    ctx.io.out(message);
-  }
+  const subgraph = task.subgraph!;
+  emitResult(ctx, args, { ok: true, task: { id: task.id, subgraph: args.flag('detail') ? subgraph : {
+    graph: subgraph.graph,
+    ...(args.has('name') ? { exposes: subgraph.exposes.filter(point => point.name === args.opt('name')?.trim()) } : { completionRequires: subgraph.completionRequires })
+  } } });
 }

@@ -10,6 +10,7 @@ import { contextFiles, taskContext } from '../../core/task-context.js';
 import { githubTargets } from '../../core/github-plan.js';
 import { githubView, readGitHubState, type GitHubView } from '../../core/github-state.js';
 import { executionGuidance, formatExecutionGuidance } from '../execution-guidance.js';
+import { contextView, emitResult, fileView, reviewSummary } from '../output.js';
 
 export function taskInspectCommands(): readonly CommandSpec[] {
   return [listCommand(), showCommand()];
@@ -19,7 +20,7 @@ function listCommand(): CommandSpec {
   return {
     name: 'task list',
     summary: 'List current tasks and computed readiness',
-    usage: 'task-graph task list [--available | --needs-refinement] [--graph G-NNN] [--status todo|in_progress|blocked|pending_review|reviewing|done|reject|cancelled] [--readiness ready|blocked] [--cwd <dir>] [--json]',
+    usage: 'task-graph task list [--available | --needs-refinement] [--graph G-NNN] [--status todo|in_progress|blocked|pending_review|reviewing|done|reject|cancelled] [--readiness ready|unready] [--cwd <dir>] [--json]',
     details: ['Reads source files and computes readiness; generated graph.json does not need to be current.'],
     run(ctx, args): number {
       const root = resolveCwd(ctx, args);
@@ -39,7 +40,7 @@ function listCommand(): CommandSpec {
       if (status && !['todo', 'in_progress', 'blocked', 'pending_review', 'reviewing', 'done', 'reject', 'cancelled'].includes(status)) {
         throw usageError(`Unsupported status "${status}"`);
       }
-      if (readiness && !['ready', 'blocked'].includes(readiness)) {
+      if (readiness && !['ready', 'unready'].includes(readiness)) {
         throw usageError(`Unsupported readiness "${readiness}"`);
       }
       if (graph && !repository.manifest.graphs.some((item) => item.id === graph)) {
@@ -53,18 +54,18 @@ function listCommand(): CommandSpec {
         .filter((task) => !readiness || task.readiness === readiness)
         .map(task => {
           const { id, graph, title, status, readiness, blockedBy, claim } = task;
-          const allowed = contextFiles(taskContext(root, task, repository));
-          const outputs = task.outputs.filter(o => allowed.some(f => f.source_task === id && f.path === o.path && f.sha256 === o.sha256));
           const target = targets.get(graph);
           const github = target ? { ...githubView(githubState, id, target.repo), ...(githubError ? { error: githubError } : {}) } : undefined;
+          if (!args.flag('detail')) return { id, ...(args.opt('graph') ? {} : { graph }), title, status, readiness,
+            ...(blockedBy.length ? { blockedBy } : {}), ...(claim ? { claim: { role: claim.role, sessionId: claim.sessionId } } : {}),
+            ...(task.planning === 'dynamic' ? { planningState: task.planningState } : {}),
+            ...(task.kind && task.kind !== 'work' ? { kind: task.kind } : {}),
+            ...(github ? { github: { status: github.status, url: github.url, ...(github.error ? { error: github.error } : {}) } } : {}) };
+          const allowed = contextFiles(taskContext(root, task, repository));
+          const outputs = task.outputs.filter(o => allowed.some(f => f.source_task === id && f.path === o.path && f.sha256 === o.sha256));
           return { id, graph, title, status, readiness, blockedBy, claim, planning: task.planning ?? 'static', planningState: task.planningState ?? 'static', kind: task.kind ?? 'work', result: status === 'done' ? 'pass' : status === 'reject' ? 'reject' : null, outputs, ...(github ? { github } : {}) };
         });
-      if (args.flag('json')) ctx.io.out(JSON.stringify({ ok: true, tasks }, null, 2));
-      else if (!args.flag('quiet')) {
-        ctx.io.out(tasks.length === 0 ? 'No tasks.' : tasks.map((task) =>
-          `${task.id}  ${task.status}  ${task.readiness}  ${task.title}${task.github ? '  GitHub: ' + task.github.status : ''}`,
-        ).join('\n'));
-      }
+      emitResult(ctx, args, { ok: true, tasks });
       return EXIT_OK;
     },
   };
@@ -87,7 +88,7 @@ function showCommand(): CommandSpec {
       const expand = args.all('expand');
       if (expand.some(kind => !['content', 'review-requirement', 'report', 'log', 'reference', 'handoff', 'output'].includes(kind))) throw usageError('Unsupported --expand category');
       if (args.flag('manifest') && (expand.length || args.has('expand-path'))) throw usageError('--manifest cannot be combined with body expansion');
-      const result = agentHandoff(root, source, { expand: expand as DocumentKind[], expandPaths: args.all('expand-path'), excludePaths: args.all('exclude-path'), preview: args.flag('preview') });
+      const result = agentHandoff(root, source, { expand: expand as DocumentKind[], expandPaths: args.all('expand-path'), excludePaths: args.all('exclude-path'), preview: args.flag('preview'), detail: args.flag('detail') });
       const context = result.context;
       const guidance = executionGuidance();
       const state = computeReadiness(repository).get(id)!;
@@ -99,6 +100,25 @@ function showCommand(): CommandSpec {
       }
       const withBody = (file: typeof context.content) => !args.flag('handoff')
         ? result.documents.find(d => d.kind === file.kind && d.source_task === file.source_task && d.read_path === file.read_path && d.section === file.section) ?? file : file;
+      if (!args.flag('detail')) {
+        const groups = ['contents', 'review_requirements', 'references', 'reports', 'logs', 'handoffs', 'outputs'] as const;
+        const selectedContext = { ...context, ...Object.fromEntries(groups.map(k => [k, context[k].map(withBody)])) };
+        const task = { id, graph: source.graph, title: source.title, status: source.status,
+          readiness: state.readiness, ...(state.blockedBy.length ? { blockedBy: state.blockedBy } : {}),
+          ...(source.claim ? { claim: { role: source.claim.role, sessionId: source.claim.sessionId } } : {}),
+          ...(source.blockedFrom ? { blockedFrom: source.blockedFrom } : {}),
+          ...(source.dependsOn.length ? { dependsOn: source.dependsOn } : {}), ...(source.subgraph ? { subgraph: source.subgraph } : {}),
+          ...(source.planning === 'dynamic' ? { planningState: state.planningState } : {}),
+          ...(source.kind && source.kind !== 'work' ? { kind: source.kind } : {}), review: reviewSummary(root, id),
+          ...(github ? { github: { status: github.status, url: github.url, ...(github.error ? { error: github.error } : {}) } } : {}) };
+        const preview = args.flag('preview') ? { ...result.preview, selected_files: result.preview.selected_files.map(f => ({ ...fileView(f), size_bytes: f.size_bytes })), excluded: undefined, excluded_count: context.excluded.length } : undefined;
+        if (args.flag('handoff') && !args.flag('json')) {
+          if (!args.flag('quiet')) ctx.io.out(result.text + (preview ? '\n' + JSON.stringify(preview, null, 2) : ''));
+        } else emitResult(ctx, args, { ok: true, task,
+          ...(args.flag('handoff') ? { project_root: context.project_root, handoff: result.text } : { context: contextView(selectedContext) }),
+          ...(preview ? { preview } : {}) });
+        return EXIT_OK;
+      }
       const task = { id, graph: source.graph, title: source.title, summary: source.summary, contentPath: context.content.path,
         review: reviewView(root, id), status: source.status, blockedFrom: source.blockedFrom, claim: source.claim, dependsOn: source.dependsOn, subgraph: source.subgraph,
         planning: source.planning ?? 'static', planningState: state.planningState ?? 'static', refinement: source.refinement, kind: source.kind ?? 'work', result: source.status === 'done' ? 'pass' : source.status === 'reject' ? 'reject' : null,
@@ -108,11 +128,10 @@ function showCommand(): CommandSpec {
         ...(github ? { github } : {}),
         documents: { content: withBody(context.content), contents: context.contents.map(withBody), reviewRequirements: context.review_requirements.map(withBody), references: context.references.map(withBody), reports: context.reports.map(withBody),
           logs: context.logs.map(withBody), handoffs: context.handoffs.map(withBody), outputs: context.outputs.map(withBody) } };
-      if (args.flag('json')) ctx.io.out(JSON.stringify({ ok: true, output_mode: args.flag('preview') ? 'preview' : expand.length || args.has('expand-path') ? 'expanded' : 'manifest',
-        task, context, guidance, preview: result.preview, ...(args.flag('handoff') ? { handoff: result.text } : {}) }, null, 2));
-      else if (!args.flag('quiet')) {
+      if (args.flag('handoff') && !args.flag('json') && !args.flag('quiet')) {
         ctx.io.out(result.text + (args.flag('preview') ? '\n' + JSON.stringify(result.preview, null, 2) : '') + '\n\n' + formatExecutionGuidance(guidance));
-      }
+      } else emitResult(ctx, args, { ok: true, output_mode: args.flag('preview') ? 'preview' : expand.length || args.has('expand-path') ? 'expanded' : 'manifest',
+        task, context, guidance, preview: result.preview, ...(args.flag('handoff') ? { handoff: result.text } : {}) });
       return EXIT_OK;
     },
   };

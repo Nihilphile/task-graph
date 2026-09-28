@@ -19,16 +19,16 @@ function runner(root: string, desktopAdapter?: DesktopAdapter) {
 test('resource discovery is read-only before init and exposes type actions for absent members', async t => {
   const w = useTempWorkspace(t, 'resource-discovery');
   const run = runner(w.root);
-  const root = await run('.', 'describe');
+  const root = await run('.', 'describe', '--detail');
   assert.equal(root.code, 0);
   assert.ok(root.data.children.includes('graph'));
-  const absent = await run('graph[G-001].task[T-0001]', 'describe');
+  const absent = await run('graph[G-001].task[T-0001]', 'describe', '--detail');
   assert.equal(absent.data.exists, false);
   assert.ok(absent.data.operations.includes('start'));
   assert.ok(absent.data.actions.find((a: {action: string}) => a.action === 'start').usage.includes("'graph[G-001].task[T-0001]' start"));
   assert.deepEqual(w.listFiles(), []);
   assert.equal((await run('.', 'init', '--name', 'Demo', '--task', 'Root')).code, 0);
-  const found = await run('graph[G-001].task[T-0001]', '--help');
+  const found = await run('graph[G-001].task[T-0001]', '--help', '--detail');
   assert.equal(found.data.exists, true);
   assert.equal(found.data.state.status, 'todo');
 });
@@ -53,7 +53,7 @@ test('resource creation, dependency arrays, dynamic refinement and lifecycle sha
     assert.equal((await run(`graph[G-001].task[${id}]`, 'start')).code, 0);
     assert.equal((await run(`graph[G-001].task[${id}]`, 'complete')).code, 0);
   }
-  const description = await run(address, 'describe');
+  const description = await run(address, 'describe', '--detail');
   assert.equal(description.data.state.planningState, 'awaiting_review');
   assert.notEqual((await run(address, 'start')).code, 0);
   assert.equal((await run(address, 'refine', '--reason', 'Requirements and interface verified')).code, 0);
@@ -85,7 +85,7 @@ test('wrong graph, conflicting placement, malformed addresses and unsupported ar
     ['graph[G-001].task[T-0001]', 'snart'],
   ]) assert.notEqual((await run(...args)).code, 0, args.join(' '));
   assert.deepEqual(w.listFiles().map(f => [f, w.read(f)]), before);
-  const description = await run('graph[G-002].task[T-0001]', 'describe');
+  const description = await run('graph[G-002].task[T-0001]', 'describe', '--detail');
   assert.equal(description.data.exists, false);
   assert.equal(description.data.actual_resource, 'graph[G-001].task[T-0001]');
 });
@@ -168,11 +168,11 @@ test('attachment collections preserve direct provenance, snapshots and audience 
   await run(`${producer}.report`, 'attach', '--path', 'report.md', '--summary', 'Verification');
   await run(`${producer}.report`, 'attach', '--path', 'feedback.md', '--audience', 'user');
   const consumer = (await run('graph[G-001].task', 'add', '--summary', 'Consumer', '--depends-on', 'T-0001')).data.task.resource;
-  const refs = await run(`${consumer}.reference`, 'list');
+  const refs = await run(`${consumer}.reference`, 'list', '--detail');
   assert.equal(refs.data.files[0].source_resource, producer);
   assert.equal(refs.data.files[0].scope, 'dependency');
   assert.equal(refs.data.files[0].mode, 'live');
-  const reports = await run(`${consumer}.report`, 'list');
+  const reports = await run(`${consumer}.report`, 'list', '--detail');
   assert.equal(reports.data.files.length, 1);
   assert.equal(reports.data.files[0].mode, 'snapshot');
   assert.match(reports.data.files[0].read_path, /^\.task-graph\/snapshots\//);
@@ -221,7 +221,7 @@ test('subgraph traversal validates every ownership hop and resolves task-only sh
   assert.notEqual((await run(`${deepPath}.subgraph.task`, 'add', '--summary', 'Implicit child')).code, 0);
   assert.notEqual((await run(`graph[${child.graph}].${childPath}`, 'start')).code, 0);
   assert.deepEqual(w.listFiles().map(f => [f, w.read(f)]), before);
-  const absent = await run(`${deepPath}.subgraph.task`, 'describe');
+  const absent = await run(`${deepPath}.subgraph.task`, 'describe', '--detail');
   assert.equal(absent.data.exists, false);
   assert.match(absent.data.reason, /no subgraph/);
   assert.ok(absent.data.operations.includes('add'));

@@ -55,7 +55,7 @@ CLI 'task[T-0001].review' start --model <模型> --reasoning xhigh --cwd <项目
 
 审查者在副本中运行验证，可能需要安装依赖；不足以验证时提交 blocked。日志、报告和任务图回写在原项目 `.task-graph` 下。工具使用 Codex 的 workspace-write 与非交互审批配置，未绕过 sandbox；模型和宿主环境须支持所需操作。
 
-Unity 等需要现场的任务显式配置 `--mode live`。工具记录现场文件指纹，审查报告记录实际环境、测试房和占用；源码发生变化时拒绝 pass/reject，可提交 blocked。文件指纹不能冻结正在运行的场景或外部服务，主控仍需协调现场。重启沿用同一验收对象，不自动接受新版本；源码漂移后须恢复原文件再重启，或由主控建立替代任务表达新的交付，本版不提供待审任务改版/撤回。
+Unity 等需要现场的任务显式配置 `--mode live`。工具记录现场文件指纹，审查报告记录实际环境、测试房和占用；源码发生变化时拒绝 pass/reject，可提交 blocked。文件指纹不能冻结正在运行的场景或外部服务，主控仍需协调现场。重启沿用同一验收对象，不自动接受新版本；源码漂移后可恢复原文件再重启；若已 blocked 且需要修改交付，由主控安排 start/reopen/claim/reassign 接手修复，进入 in_progress 后再改动并 complete，重新捕获交付。仍在 pending_review/reviewing 的审查不能直接接管。
 
 ## 审查者交卷
 
@@ -65,7 +65,7 @@ Unity 等需要现场的任务显式配置 `--mode live`。工具记录现场文
 CLI 'task[T-0001].review' finish --review-id <本轮UUID> --result pass --report <项目相对报告路径> --cwd <项目> --json
 ```
 
-result 可为 pass / reject / blocked。pass 将任务置为 done；reject 保持依赖阻塞；缺环境、材料或判据时 blocked，将任务设为 `blocked` 并通知主控；补齐后使用 review restart 回到 pending_review。reject 还必须传 `--error-report <Markdown文件>`，写明失败、失败模式及原因或改进，和结论一起追加到 [error-book](error-book.md)。验收报告已有简短复盘时两参数可指同一文件；pass/blocked 不传 error-report。空报告不接受；每轮报告和快照保留。重复提交相同报告与结果幂等，旧轮次不能改写新轮次。
+result 可为 pass / reject / blocked。pass 将任务置为 done；reject 保持依赖阻塞；缺环境、材料或判据时 blocked，将任务设为 `blocked` 并通知主控；原交付重审用 review restart 回到 pending_review；若要进入任务施工修复，先 start 接手到 in_progress。reject 还必须传 `--error-report <Markdown文件>`，写明失败、失败模式及原因或改进，和结论一起追加到 [error-book](error-book.md)。验收报告已有简短复盘时两参数可指同一文件；pass/blocked 不传 error-report。空报告不接受；每轮报告和快照保留。重复提交相同报告与结果幂等，旧轮次不能改写新轮次。
 
 有效结果以 `.review finish` 成功为准，进程退出码和聊天结语不替代交卷。报告、状态和通知事件在同一次项目事务中保存；现有文件事务仍需在进程/系统中断后核验持久状态。
 
@@ -79,7 +79,7 @@ CLI 'task[T-0001].review' restart --cwd <项目> --json
 
 后台执行器隐藏启动，分别监控每个审查进程。进程退出而没有 finish 时记录 failed，将任务设为 blocked 并告警；先成功 finish 后异常退出则保留结论，记录运行异常。状态包含轮次、会话 ID、日志与错误地址。
 
-执行器或机器整体退出后，下一次修改命令会重新启动监控；可用 recover 主动核对死进程。restart 只用于 failed/blocked 且旧进程已退出的情况，创建新轮次并保留同一交付/RR。仍可能存活的旧进程会阻止重启；先核查日志和进程。本版不自动重试，也不提供系统开机自启动服务。
+执行器或机器整体退出后，下一次修改命令会重新启动监控；可用 recover 主动核对死进程。restart 只用于 failed/blocked 且旧进程已退出的情况，创建新轮次并保留同一交付/RR。仍可能存活的旧进程会阻止重启；先核查日志和进程。接手修复同样要求旧审查进程退出，成功后取消旧轮次的当前身份并保留其证据，阻止迟到交卷覆盖修复。修复完成若 auto-review 开启则捕获新交付重新审查；未开启则正常 done，可再手动 review start。本版不自动重试，也不提供系统开机自启动服务。
 
 已有 graph watch 订阅接收 pass/reject、blocked、未交卷退出和超时通知，无订阅时状态与日志仍可查询。先交卷后异常退出只补记运行异常，不重复发送结果通知。pending_review 和 reviewing 都不发送完成通知，正常一轮只在交卷后发送一次结论。通知带轮次和本轮报告入口；旧轮次未发送的消息在投递前取消。reject 附直接受影响后继，由主控安排修复；不会自动回滚已有工作。
 

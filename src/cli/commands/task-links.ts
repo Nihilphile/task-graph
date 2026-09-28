@@ -2,6 +2,9 @@ import { EXIT_OK, type CliContext, type CommandSpec } from '../context.js';
 import { usageError } from '../../core/errors.js';
 import { linkTask, unlinkTask } from '../../core/deps.js';
 import type { DependencyMode } from '../../core/task.js';
+import { emitResult } from '../output.js';
+import { computeReadiness } from '../../core/readiness.js';
+import { loadTaskRepository } from '../../core/repo.js';
 import { resolveCwd } from '../paths.js';
 
 /** The `task link` and `task unlink` commands. */
@@ -31,17 +34,11 @@ function linkCommand(): CommandSpec {
       const mode = readMode(args.opt('mode'));
       const task = linkTask(root, { successor, predecessor, mode, gate });
 
-      if (args.flag('json')) {
-        ctx.io.out(
-          JSON.stringify(
-            { ok: true, task: { id: task.id, dependsOn: task.dependsOn } },
-            null,
-            2,
-          ),
-        );
-      } else if (!args.flag('quiet')) {
-        ctx.io.out(`Linked ${predecessor} -> ${task.id}`);
-      }
+      const state = computeReadiness(loadTaskRepository(root)).get(task.id)!;
+      emitResult(ctx, args, { ok: true, task: { id: task.id, readiness: state.readiness,
+        ...(state.blockedBy.length ? { blockedBy: state.blockedBy } : {}),
+        ...(args.flag('detail') ? { dependsOn: task.dependsOn } : {}) },
+        dependency: { action: 'added', task: predecessor, mode: args.opt('gate') ? 'partial' : 'full', ...(args.opt('gate') ? { gate: args.opt('gate') } : {}) } });
       return EXIT_OK;
     },
   };
@@ -66,13 +63,11 @@ function unlinkCommand(): CommandSpec {
       }
       const task = unlinkTask(root, { successor, predecessor, gate: args.opt('gate') });
 
-      if (args.flag('json')) {
-        ctx.io.out(
-          JSON.stringify({ ok: true, task: { id: task.id, dependsOn: task.dependsOn } }, null, 2),
-        );
-      } else if (!args.flag('quiet')) {
-        ctx.io.out(`Unlinked ${predecessor} from ${task.id}`);
-      }
+      const state = computeReadiness(loadTaskRepository(root)).get(task.id)!;
+      emitResult(ctx, args, { ok: true, task: { id: task.id, readiness: state.readiness,
+        ...(state.blockedBy.length ? { blockedBy: state.blockedBy } : {}),
+        ...(args.flag('detail') ? { dependsOn: task.dependsOn } : {}) },
+        dependency: { action: 'removed', task: predecessor, mode: args.opt('gate') ? 'partial' : 'full', ...(args.opt('gate') ? { gate: args.opt('gate') } : {}) } });
       return EXIT_OK;
     },
   };

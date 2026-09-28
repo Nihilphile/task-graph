@@ -11,7 +11,7 @@ import { mutateTaskDocument } from '../src/core/mutate.js';
 
 async function invoke(root: string, ...args: string[]) {
   const output: string[] = [];
-  const code = await main([...args, '--json'], { cwd: root, io: { out: s => output.push(s), err: () => {} } });
+  const code = await main([...args, '--json', '--detail'], { cwd: root, io: { out: s => output.push(s), err: () => {} } });
   return { code, value: JSON.parse(output.join('\n')), text: output.join('\n') };
 }
 

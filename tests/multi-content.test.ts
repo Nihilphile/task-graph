@@ -20,7 +20,7 @@ test('Multiple requirements survive creation, incremental binding, handoff, HTML
   const id = added.task.id;
   assert.equal((await run('task', 'content', 'attach', id, '--path', 'acceptance.md', '--summary', 'User acceptance')).code, 0);
   const manifest = await run('task', 'show', id);
-  assert.deepEqual(manifest.context.contents.map((f: {path: string}) => f.path), ['goal.md', 'implementation.md', 'acceptance.md']);
+  assert.deepEqual(manifest.context.contents.map((f: {read_path: string}) => f.read_path), ['goal.md', 'implementation.md', 'acceptance.md']);
   assert.ok(!JSON.stringify(manifest).includes('ACCEPTANCE_BODY'));
   const expanded = await run('task', 'show', id, '--handoff', '--expand', 'content');
   for (const name of ['GOAL', 'IMPLEMENTATION', 'ACCEPTANCE']) assert.ok(expanded.handoff.includes(name + '_BODY'));

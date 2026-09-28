@@ -8,6 +8,7 @@ import { usageError } from '../core/errors.js';
 import { loadTaskRepository, type TaskRepository } from '../core/repo.js';
 import { taskContext } from '../core/task-context.js';
 import { computeReadiness } from '../core/readiness.js';
+import { emitResult, fileView } from './output.js';
 
 export interface ResourceAddress {
   address: string;
@@ -67,7 +68,7 @@ interface Route { action: string; command?: CommandSpec; fixed?: string[]; summa
 // `status` is a value on task lists and a switch on graph watch.
 function validateOptionValues(raw: readonly string[], route: Route): void {
   const booleans = new Set(['recursive', 'all', 'available', 'flush', 'allow-duplicate', 'needs-refinement', 'handoff', 'manifest',
-    'preview', 'snapshot', 'gh', 'dry-run', 'entry', 'force', 'help', 'json', 'offline', 'quiet', 'reopen', 'replace', 'strict', 'takeover', 'verbose']);
+    'preview', 'snapshot', 'gh', 'dry-run', 'entry', 'force', 'help', 'json', 'offline', 'quiet', 'reopen', 'replace', 'strict', 'takeover', 'verbose', 'detail']);
   if (route.command?.name === 'graph watch') booleans.add('status');
   for (let i = 0; i < raw.length; i++) {
     const token = raw[i]!;
@@ -180,6 +181,7 @@ function inspect(root: string, resource: ResourceAddress, required: boolean): In
 }
 
 function emit(ctx: CliContext, args: ParsedArgs, data: Record<string, unknown>, text?: string): void {
+  if (args.flag('quiet')) return;
   if (args.flag('json')) ctx.io.out(JSON.stringify({ ok: true, ...data }, null, 2));
   else if (!args.flag('quiet')) ctx.io.out(text ?? JSON.stringify(data, null, 2));
 }
@@ -201,6 +203,13 @@ function describe(resource: ResourceAddress, choices: Route[], root: string, ctx
       'A ready task is not necessarily unclaimed or pending. Inspect status and claim before dispatch.',
       'Dynamic tasks require current refinement before start; completed dependencies do not refine them automatically.'],
     ...(!exists ? { reason: inspection.reason } : {}) };
+  if (!args.flag('detail')) {
+    emitResult(ctx, args, { ok: true, resource: resource.address, exists,
+      ...(!exists ? { reason: inspection.reason, ...(inspection.actual_resource ? { actual_resource: inspection.actual_resource } : {}) } : {}),
+      actions: actions.map(a => ({ action: a.action, summary: a.summary })),
+      ...(data.children.length ? { children: data.children.map(c => c.startsWith(resource.address + '.') ? c.slice(resource.address.length + 1) : c) } : {}) });
+    return;
+  }
   emit(ctx, args, data, [`Resource: ${resource.address} (${exists ? 'exists' : 'not found'})`,
     ...(readiness ? [`State: ${task!.status}; ${readiness.readiness}; planning: ${readiness.planningState ?? 'static'}`, `Blockers: ${JSON.stringify(readiness.blockedBy)}`] : []),
     ...actions.flatMap(a => [`${a.action}: ${a.summary}`, `  ${a.usage}`]),
@@ -220,9 +229,11 @@ function resourceUsage(resource: ResourceAddress, route: Route): string {
   return `task-graph '${resource.address}' ${route.action}${suffix}`;
 }
 
-function query(resource: ResourceAddress, repository: TaskRepository, root: string, action: string): Record<string, unknown> {
+function query(resource: ResourceAddress, repository: TaskRepository, root: string, action: string, detail: boolean): Record<string, unknown> {
   const address = resource.address;
-  if (resource.type === 'errorbook') return { resource: address, project_root: root, entries: errorBookEntries(repository, resource.graph, action === 'show') };
+  if (resource.type === 'errorbook') return { resource: address, project_root: root, entries: errorBookEntries(repository, resource.graph, action === 'show').map(e => detail ? e : {
+    id: e.id, task: e.task, title: e.title, at: e.at, report: fileView(e.report),
+    ...(action === 'show' ? { evidence: e.evidence } : {}) }) };
   if (resource.type === 'graph') return { resource: address, graphs: repository.manifest.graphs.map(g => ({ ...g, resource: graphAddress(g.id), entry: repository.manifest.entryGraphs.includes(g.id) })) };
   if (resource.type === 'graph-item') {
     const graph = repository.manifest.graphs.find(g => g.id === resource.graph)!;
@@ -242,8 +253,8 @@ function query(resource: ResourceAddress, repository: TaskRepository, root: stri
   const files = groups[resource.type]!;
   return { resource: address, project_root: context.project_root, files: files.map(file => {
     const source = file.source_task ? repository.taskById(file.source_task) : undefined;
-    return { ...file, ...(source ? { source_resource: taskAddress(source.graph, source.id) } : {}) };
-  }), excluded: context.excluded.filter(f => f.kind === resource.type) };
+    return detail ? { ...file, ...(source ? { source_resource: taskAddress(source.graph, source.id) } : {}) } : fileView(file);
+  }), ...(detail ? { excluded: context.excluded.filter(f => f.kind === resource.type) } : context.excluded.some(f => f.kind === resource.type) ? { excluded_count: context.excluded.filter(f => f.kind === resource.type).length } : {}) };
 }
 
 export interface ResourceInvocation { argv: string[]; resource: ResourceAddress; scopedGraph?: string; }
@@ -264,7 +275,7 @@ export function prepareResource(argv: readonly string[], ctx: CliContext, comman
   const route = choices.find(r => r.action === action);
   if (action === 'describe' || (args.flag('help') && !route)) {
     validateOptionValues(argv.slice(help ? 1 : 2), { action: 'describe', summary: '' });
-    if (args.positionals.length || [...args.options.keys()].some(k => !['json', 'cwd', 'quiet', 'help'].includes(k))) throw usageError('describe accepts only --cwd, --json, --quiet and --help.');
+    if (args.positionals.length || [...args.options.keys()].some(k => !['json', 'cwd', 'quiet', 'help', 'detail'].includes(k))) throw usageError('describe accepts only --cwd, --json, --quiet, --detail and --help.');
     describe(resource, choices, root, ctx, args); return null;
   }
   if (!route) throw usageError(`Unsupported action "${action}" on ${resource.address}`, [
@@ -278,12 +289,12 @@ export function prepareResource(argv: readonly string[], ctx: CliContext, comman
   if (inspection) resource = inspection.resource;
   const repository = inspection?.repository;
   if (!route.command) {
-    if (args.positionals.length || [...args.options.keys()].some(k => !['json', 'cwd', 'quiet'].includes(k))) throw usageError('This query accepts only --cwd, --json and --quiet.');
-    emit(ctx, args, query(resource, repository!, root, action)); return null;
+    if (args.positionals.length || [...args.options.keys()].some(k => !['json', 'cwd', 'quiet', 'detail'].includes(k))) throw usageError('This query accepts only --cwd, --json, --quiet and --detail.');
+    emitResult(ctx, args, { ok: true, ...query(resource, repository!, root, action, args.flag('detail')) }); return null;
   }
   const options = new Map([...args.options].map(([key, values]) => [key, [...values]]));
   const allowed = new Set([...route.command.usage.matchAll(/--([a-z][a-z-]*)/g)].map(m => m[1]!));
-  for (const key of ['cwd', 'json', 'quiet', 'help']) allowed.add(key);
+  for (const key of ['cwd', 'json', 'quiet', 'help', 'detail']) allowed.add(key);
   if (route.command.name === 'task add') for (const key of ['title', 'goal', 'condition', 'work-log', 'blocker', 'derived-from']) allowed.add(key);
   for (const key of options.keys()) if (!allowed.has(key)) throw usageError(`Unknown option --${key} for ${resource.address} ${action}`, [`Run task-graph '${resource.address}' ${action} --help.`]);
   for (const key of ['cwd', 'graph', 'from']) if ((options.get(key)?.length ?? 0) > 1) throw usageError(`Pass --${key} only once.`);

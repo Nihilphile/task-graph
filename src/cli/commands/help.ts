@@ -9,6 +9,7 @@ export function globalOptionsHelp(): readonly string[] {
     'Global options:',
     '  --cwd <dir>   Project root that contains .task-graph/ (default: current directory)',
     '  --json        Print a machine-readable JSON result',
+    '  --detail      Include related metadata and diagnostics (does not expand bodies)',
     '  --quiet       Suppress non-essential output',
     '  -h, --help    Show help',
   ];

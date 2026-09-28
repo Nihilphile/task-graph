@@ -60,6 +60,7 @@ export function renderIndexHtml(projection: GraphProjection): string {
     '<li><span class="legend-swatch swatch-running"></span>&#9679; running</li>',
     '<li><span class="legend-swatch swatch-ready"></span>&#9654; ready</li>',
     '<li><span class="legend-swatch swatch-blocked"></span>! blocked</li>',
+    '<li><span class="legend-swatch swatch-unready"></span>◷ unready · 前置条件未满足</li>',
     '<li><span class="legend-swatch swatch-cancelled"></span>&#215; cancelled</li>',
     '</ul>',
     '</section>',
@@ -110,10 +111,10 @@ body { margin:0; font:14px/1.5 system-ui,-apple-system,"Segoe UI","Microsoft YaH
 .node .node-body { fill:#fff; stroke:var(--line); stroke-width:1.5; rx:8; }
 .node text { font-size:12px; fill:var(--text); pointer-events:none; }
 .node .badge { font-size:12px; font-weight:700; }
-.node.readiness-ready:not(.status-done):not(.status-in_progress):not(.status-cancelled) .node-body { fill:#eff4ff; stroke:#2f6feb; }
-.node.readiness-ready:not(.status-done):not(.status-in_progress):not(.status-cancelled) .badge { fill:#2f6feb; }
-.node.readiness-blocked:not(.status-done):not(.status-in_progress):not(.status-cancelled) .node-body { fill:#fef3f2; stroke:#f04438; }
-.node.readiness-blocked:not(.status-done):not(.status-in_progress):not(.status-cancelled) .badge { fill:#f04438; }
+.node.readiness-ready.status-todo .node-body { fill:#eff4ff; stroke:#2f6feb; }
+.node.readiness-ready.status-todo .badge { fill:#2f6feb; }
+.node.readiness-unready.status-todo .node-body { fill:#f2f4f7; stroke:#98a2b3; }
+.node.readiness-unready.status-todo .badge { fill:#667085; }
 .node.status-done .node-body { fill:#e7f8ef; stroke:#12b76a; }
 .node.status-done .badge { fill:#12b76a; }
 .node.status-in_progress .node-body { fill:#fffaeb; stroke:#f79009; }
@@ -159,6 +160,7 @@ body { margin:0; font:14px/1.5 system-ui,-apple-system,"Segoe UI","Microsoft YaH
 .swatch-running { border:2px solid #f79009; background:#fffaeb; }
 .swatch-ready { border:2px solid #2f6feb; background:#eff4ff; }
 .swatch-blocked { border:2px solid #f04438; background:#fef3f2; }
+.swatch-unready { border:2px solid #98a2b3; background:#f2f4f7; }
 .swatch-cancelled { border:2px solid #98a2b3; background:#f2f4f7; }
 .composite-button { margin:8px 0; padding:6px 10px; border:1px solid var(--accent); color:var(--accent); background:var(--panel); border-radius:6px; cursor:pointer; }
 dl { display:grid; grid-template-columns:auto 1fr; gap:2px 10px; margin:0 0 12px; font-size:12px; }

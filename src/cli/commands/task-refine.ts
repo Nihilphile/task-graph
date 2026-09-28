@@ -4,6 +4,7 @@ import { loadTaskRepository } from '../../core/repo.js';
 import { usageError } from '../../core/errors.js';
 import { resolveCwd } from '../paths.js';
 import { EXIT_OK, type CommandSpec } from '../context.js';
+import { emitResult } from '../output.js';
 
 export function taskRefineCommands(): CommandSpec[] {
   return ['refine', 'unrefine'].map(action => ({
@@ -16,8 +17,7 @@ export function taskRefineCommands(): CommandSpec[] {
       const root = resolveCwd(ctx, args);
       const task = refineTask(root, { id, reason, reset: action === 'unrefine', actor: args.opt('actor'), now: () => ctx.now() });
       const state = computeReadiness(loadTaskRepository(root)).get(id);
-      if (args.flag('json')) ctx.io.out(JSON.stringify({ ok: true, task: { id, refinement: task.refinement, ...state } }));
-      else if (!args.flag('quiet')) ctx.io.out(`${id}: ${state?.planningState}`);
+      emitResult(ctx, args, { ok: true, task: { id, ...(args.flag('detail') ? { refinement: task.refinement } : {}), ...state } });
       return EXIT_OK;
     },
   }));

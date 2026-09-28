@@ -26,7 +26,7 @@ test('content is a single external source; summary, free-form Markdown and depen
   const result = await cli(w, 'task', 'add', '--summary', '验证任务', '--content', '说明/验证.md', '--depends-on', 'T-0001', '--json');
   assert.equal(result.code, 0, result.stderr);
   const id = JSON.parse(result.stdout).task.id as string;
-  assert.equal(JSON.parse(result.stdout).task.readiness, 'blocked');
+  assert.equal(JSON.parse(result.stdout).task.readiness, 'unready');
   let task = loadTaskRepository(w.root).taskById(id)!;
   assert.equal(task.content, '说明/验证.md');
   assert.ok(!task.body.includes('原生证据'));
@@ -144,7 +144,7 @@ test('available excludes blocked, claimed and completed work; handoff preview wr
   const w = useTempWorkspace(t, 'us-025-available');
   initializeProject(w.root, { name: 'available', task: '前置' });
   const blocked = addTask(w.root, { summary: '后续', dependsOnSpecs: ['T-0001'] });
-  assert.throws(() => startTask(w.root, { id: blocked.id, role: 'tester', sessionId: 'a' }), /blocked/i);
+  assert.throws(() => startTask(w.root, { id: blocked.id, role: 'tester', sessionId: 'a' }), /unready/i);
   const started = startTask(w.root, { id: 'T-0001' });
   completeTask(w.root, { id: started.id });
   const available = await cli(w, 'task', 'list', '--available', '--json');

@@ -24,7 +24,7 @@ test('Manual blocked persists phase and claim; only last unblock restores it, ne
   let task=addManualBlocker(w.root,{id,reason:'等待用户裁定'});
   assert.equal(task.status,'blocked');assert.equal(task.blockedFrom,'in_progress');assert.equal(task.claim?.sessionId,'worker-1');
   assert.match(w.read('.task-graph/tasks/T-0001.md'),/status: blocked/);
-  assert.throws(()=>completeTask(w.root,{id}),/cannot move/);assert.throws(()=>startTask(w.root,{id}),/cannot move/);
+  assert.throws(()=>completeTask(w.root,{id}),/cannot move/);
   addManualBlocker(w.root,{id,reason:'等待设备'});
   assert.equal(removeManualBlocker(w.root,{id,reason:'等待用户裁定'}).status,'blocked');
   task=removeManualBlocker(w.root,{id,reason:'等待设备'});assert.equal(task.status,'in_progress');assert.equal(task.blockedFrom,undefined);

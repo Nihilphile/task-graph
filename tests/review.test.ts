@@ -58,7 +58,7 @@ test('graph scan skips absent/broken RR and explicit off; defaults and per-task 
   const scan = await w.cli('graph[G-001].auto-review', 'enable', '--model', 'custom', '--reasoning', 'high');
   assert.equal(scan.code, 0); assert.equal(scan.results.find((r: any) => r.task === missing).result, 'missing_rr');
   assert.equal(scan.results.find((r: any) => r.task === off).result, 'explicitly_disabled');
-  assert.equal((await w.cli('task[T-0001].auto-review', 'status')).review.config.model, 'custom');
+  assert.equal((await w.cli('task[T-0001].auto-review', 'status', '--detail')).review.config.model, 'custom');
   w.write('rr.md', '   ');
   const rescanned = await w.cli('graph[G-001].auto-review', 'enable');
   assert.equal(rescanned.results.find((r: any) => r.task === 'T-0001').result, 'invalid_rr');
@@ -76,7 +76,7 @@ test('auto complete submits, releases claim and gates dependencies; finish commi
   completeTask(w.root, { id: 'T-0001', reports: ['implementation.md'] });
   assert.equal(w.task().status, 'pending_review'); assert.equal(w.task().claim, null);
   assert.equal(readWatchLedger(w.root)!.events.length, 0);
-  assert.equal(computeReadiness(loadTaskRepository(w.root)).get(successor)!.readiness, 'blocked');
+  assert.equal(computeReadiness(loadTaskRepository(w.root)).get(successor)!.readiness, 'unready');
   assert.throws(() => completeTask(w.root, { id: 'T-0001' }));
   assert.notEqual((await w.cli('task[T-0001]', 'claim', '--role', 'worker', '--session-id', 'wrong')).code, 0);
   w.running(); w.write(w.run().reportPath, '# 验收通过\n读取 answer.txt，值为 42。');
@@ -88,7 +88,7 @@ test('auto complete submits, releases claim and gates dependencies; finish commi
   assert.throws(() => configureReview(w.root, 'T-0001', false, {}), /before starting/);
   assert.throws(() => attachDocument(w.root, { id: 'T-0001', path: 'answer.txt', kind: 'content' }), /fixed during review/);
   assert.throws(() => completeTask(w.root, { id: 'T-0001' }));
-  assert.equal(computeReadiness(loadTaskRepository(w.root)).get(successor)!.readiness, 'blocked');
+  assert.equal(computeReadiness(loadTaskRepository(w.root)).get(successor)!.readiness, 'unready');
   const page = await openViewer(w.file('.task-graph/generated/index.html')); t.after(() => page.close());
   assert.match(taskNode(page,'T-0001').textContent!, /审查中/);
   assert.ok(page.document.querySelector('[data-status-filter="reviewing"]'));

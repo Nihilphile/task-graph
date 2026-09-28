@@ -153,7 +153,7 @@ test('US-016: build writes the full deterministic projection', () => {
     { task: 'T-0001', mode: 'partial', gate: 'api-ready' },
   ]);
   assert.deepEqual(successor.manualBlockers, ['等待设计稿']);
-  assert.equal(successor.readiness, 'blocked');
+  assert.equal(successor.readiness, 'ready');
   assert.deepEqual(
     successor.blockedBy.map((reason) => reason.kind),
     ['manual'],

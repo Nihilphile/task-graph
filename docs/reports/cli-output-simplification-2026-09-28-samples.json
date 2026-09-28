@@ -1,0 +1,106 @@
+{
+  "at": "2026-09-28T08:40:42.048Z",
+  "method": "Read-only project queries, UTF-16 String.length; project may change after baseline; no output bodies stored",
+  "rows": [
+    {
+      "label": "T0107 show",
+      "args": [
+        "task[T-0107]",
+        "show"
+      ],
+      "code": 0,
+      "before_chars": 29852,
+      "after_chars": 5887,
+      "reduction_percent": 80.3
+    },
+    {
+      "label": "T0107 review status",
+      "args": [
+        "task[T-0107].review",
+        "status"
+      ],
+      "code": 0,
+      "before_chars": 7355,
+      "after_chars": 890,
+      "reduction_percent": 87.9
+    },
+    {
+      "label": "T0107 auto-review status",
+      "args": [
+        "task[T-0107].auto-review",
+        "status"
+      ],
+      "code": 0,
+      "before_chars": 6712,
+      "after_chars": 179,
+      "reduction_percent": 97.3
+    },
+    {
+      "label": "G014 list",
+      "args": [
+        "graph[G-014].task",
+        "list"
+      ],
+      "code": 0,
+      "before_chars": 41585,
+      "after_chars": 5025,
+      "reduction_percent": 87.9
+    },
+    {
+      "label": "G014 review policy",
+      "args": [
+        "graph[G-014].auto-review",
+        "status"
+      ],
+      "code": 0,
+      "before_chars": 18546,
+      "after_chars": 1880,
+      "reduction_percent": 89.9
+    },
+    {
+      "label": "G014 watch status",
+      "args": [
+        "graph[G-014].watch",
+        "status"
+      ],
+      "code": 0,
+      "before_chars": 302,
+      "after_chars": 302,
+      "reduction_percent": 0
+    },
+    {
+      "label": "G014 graph show",
+      "args": [
+        "graph[G-014]",
+        "show"
+      ],
+      "code": 0,
+      "before_chars": 2610,
+      "after_chars": 2610,
+      "reduction_percent": 0
+    },
+    {
+      "label": "T0107 reference list",
+      "args": [
+        "task[T-0107].reference",
+        "list"
+      ],
+      "code": 0,
+      "before_chars": 3452,
+      "after_chars": 1747,
+      "reduction_percent": 49.4
+    },
+    {
+      "label": "T0107 show handoff",
+      "args": [
+        "task[T-0107]",
+        "show",
+        "--handoff"
+      ],
+      "code": 0,
+      "before_chars": 32728,
+      "after_chars": 4282,
+      "reduction_percent": 86.9
+    }
+  ]
+}

@@ -108,15 +108,16 @@ test('US-021: nodes filter by persisted status and computed readiness', async (t
   assert.ok((page.document.getElementById('filter-summary')!.textContent ?? '').includes('3/7'));
 
   setChecked(page, page.document.querySelector('[data-status-filter="todo"]')!, false);
-  setChecked(page, page.document.querySelector('[data-readiness-filter="blocked"]')!, true);
-  assert.deepEqual(nodeIds(page).sort(), [ids.blocked, ids.convergence].sort());
+  setChecked(page, page.document.querySelector('[data-readiness-filter="unready"]')!, true);
+  assert.deepEqual(nodeIds(page).sort(), [ids.convergence].sort());
 
-  setChecked(page, page.document.querySelector('[data-readiness-filter="blocked"]')!, false);
+  setChecked(page, page.document.querySelector('[data-readiness-filter="unready"]')!, false);
   setChecked(page, page.document.querySelector('[data-readiness-filter="ready"]')!, true);
   // Finished and cancelled work is not blocked, so it computes as ready; the
   // status filter is what narrows the canvas to open work.
   assert.deepEqual(nodeIds(page).sort(), [
     ids.composite,
+    ids.blocked,
     ids.cancelled,
     ids.done,
     ids.partialSuccessor,

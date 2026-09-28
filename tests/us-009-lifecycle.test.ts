@@ -218,7 +218,7 @@ test('US-009: the lifecycle commands work through the CLI', () => {
     cwd: workspace.root,
   });
   assert.equal(start.code, 0, start.stderr);
-  assert.match(start.stdout, /Started T-0001 \(in_progress\): 根任务/);
+  assert.match(start.stdout, /id: T-0001[\s\S]*status: in_progress[\s\S]*title: 根任务/);
 
   const prematureComplete = runCliProcess(['task', 'complete', 'T-0002'], { cwd: workspace.root });
   assert.equal(prematureComplete.code, EXIT_FAILURE);
@@ -240,13 +240,13 @@ test('US-009: the lifecycle commands work through the CLI', () => {
     cwd: workspace.root,
   });
   assert.equal(reopen.code, 0, reopen.stderr);
-  assert.match(reopen.stdout, /Reopened T-0001 \(in_progress\)/);
+  assert.match(reopen.stdout, /id: T-0001[\s\S]*status: in_progress/);
 
   const cancel = runCliProcess(['task', 'cancel', 'T-0001', '--reason', '不再需要'], {
     cwd: workspace.root,
   });
   assert.equal(cancel.code, 0, cancel.stderr);
-  assert.match(cancel.stdout, /Cancelled T-0001 \(cancelled\)/);
+  assert.match(cancel.stdout, /id: T-0001[\s\S]*status: cancelled/);
 
   const afterCancel = runCliProcess(['task', 'start', 'T-0001'], { cwd: workspace.root });
   assert.equal(afterCancel.code, EXIT_FAILURE);

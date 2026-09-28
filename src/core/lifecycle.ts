@@ -6,6 +6,7 @@ import { historyEntry, type TaskDocument, type TaskStatus } from './task.js';
 import { assertNotCancelled, mutateTaskDocument, timestampOf, type ClockOptions } from './mutate.js';
 import { appendManagedLog, saveHandoff, withDocument, documentPath, readDocument, snapshotDocument } from './documents.js';
 import { computeReadiness, describeReadiness } from './readiness.js';
+import { beginBlockedRepair } from './repair.js';
 
 /**
  * Allowed persisted status transitions.
@@ -16,7 +17,7 @@ import { computeReadiness, describeReadiness } from './readiness.js';
 export const STATUS_TRANSITIONS: Readonly<Record<TaskStatus, readonly TaskStatus[]>> = {
   todo: ['in_progress', 'cancelled'],
   in_progress: ['done', 'reject', 'cancelled'],
-  blocked: ['cancelled'],
+  blocked: ['in_progress', 'cancelled'],
   pending_review: [],
   reviewing: [],
   done: ['in_progress'],
@@ -61,10 +62,11 @@ export function transitionTask(
   const at = timestampOf(options.now);
   return mutateTaskDocument(root, options.id, (current, transaction) => {
     const from = current.status;
+    const repairing = from === 'blocked' && to === 'in_progress';
     const auto = readReviewState(root).tasks[current.id]?.enabled;
     if (auto && ['done', 'reject'].includes(to)) throw new TaskGraphError('E_REVIEW_REQUIRED', 'Use complete to submit to auto-review; only review finish may record its verdict');
-    if (auto && to === 'in_progress') requireReviewRequirements(root, current);
-    assertNotCancelled(current);
+    if (auto && to === 'in_progress' && !repairing) requireReviewRequirements(root, current);
+    assertNotCancelled(repairing ? { ...current, blockedFrom: undefined } : current);
     if (from === to) {
       throw new TaskGraphError(
         'E_TASK_TRANSITION',
@@ -113,14 +115,15 @@ export function transitionTask(
     let next = current;
     if (to === 'in_progress') {
       const readiness = computeReadiness(loadTaskRepository(root)).get(current.id)!;
-      if (readiness.readiness === 'blocked') throw new TaskGraphError('E_TASK_BLOCKED', `Task "${current.id}" is ${describeReadiness(readiness)}`);
-      if (current.planning === 'dynamic' && readiness.planningState !== 'refined') throw new TaskGraphError('E_TASK_BLOCKED', 'Dynamic work requires current controller refinement before reopening');
+      if (!repairing && readiness.readiness === 'unready') throw new TaskGraphError('E_TASK_UNREADY', `Task "${current.id}" is ${describeReadiness(readiness)}`);
+      if (!repairing && current.planning === 'dynamic' && readiness.planningState !== 'refined') throw new TaskGraphError('E_TASK_UNREADY', 'Dynamic work requires current controller refinement before reopening');
       if (options.role !== undefined || options.sessionId !== undefined) {
         if (!options.role?.trim() || !options.sessionId?.trim()) throw new TaskGraphError('E_TASK_CLAIM', 'Starting with a claim requires --role and --session-id');
         if (current.claim && (current.claim.role !== options.role || current.claim.sessionId !== options.sessionId)) throw new TaskGraphError('E_TASK_CLAIMED', `Task "${current.id}" is already claimed`, ['Use task reassign for an explicit takeover.']);
         if (!current.claim) next = { ...next, claim: { role: options.role.trim(), sessionId: options.sessionId.trim(), claimedAt: at },
           history: [...next.history, historyEntry('claimed', at, options.actor ?? null, { role: options.role.trim(), session_id: options.sessionId.trim() })] };
       }
+      if (repairing) return beginBlockedRepair(root, next, transaction, options);
       next = saveHandoff(root, { ...next, status: to }, transaction, { ...options, title: `派工 · ${at}` });
     }
     if (to === 'done' || to === 'reject') {
@@ -158,7 +161,7 @@ export function transitionTask(
   });
 }
 
-/** `todo` -> `in_progress`; a `done` task requires `reopen: true`. */
+/** Start todo work or blocked repair; done/reject requires an explicit reopen. */
 export function startTask(root: string, options: TransitionOptions): TaskDocument {
   return transitionTask(root, 'in_progress', options);
 }
@@ -178,7 +181,7 @@ export function cancelTask(root: string, options: TransitionOptions): TaskDocume
   return transitionTask(root, 'cancelled', options);
 }
 
-/** `done` -> `in_progress`, only through an explicit reopen request. */
+/** Explicitly reopen completed/rejected work, or accept blocked work for repair. */
 export function reopenTask(root: string, options: TransitionOptions): TaskDocument {
   return transitionTask(root, 'in_progress', { ...options, reopen: true });
 }

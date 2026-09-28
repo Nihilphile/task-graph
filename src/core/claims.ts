@@ -3,11 +3,12 @@ import { historyEntry, type TaskClaim, type TaskDocument } from './task.js';
 import { assertNotCancelled, mutateTaskDocument, timestampOf, type ClockOptions } from './mutate.js';
 import { loadTaskRepository } from './repo.js';
 import { computeReadiness } from './readiness.js';
+import { beginBlockedRepair } from './repair.js';
 
 function assertDynamicClaim(root: string, task: TaskDocument): void {
   if (task.planning !== 'dynamic') return;
   const state = computeReadiness(loadTaskRepository(root)).get(task.id);
-  if (state?.readiness !== 'ready' || state.planningState !== 'refined') throw new TaskGraphError('E_TASK_BLOCKED', 'Dynamic task requires controller refinement and satisfied dependencies before claiming');
+  if (state?.readiness !== 'ready' || state.planningState !== 'refined') throw new TaskGraphError('E_TASK_UNREADY', 'Dynamic task requires controller refinement and satisfied dependencies before claiming');
 }
 
 /** History event names recorded by the claim commands. */
@@ -51,9 +52,9 @@ export function claimTask(root: string, options: ClaimTaskOptions): TaskDocument
   const identity = readClaimIdentity(options);
   const at = timestampOf(options.now);
 
-  return mutateTaskDocument(root, options.id, (current) => {
-    assertNotCancelled(current);
-    assertDynamicClaim(root, current);
+  return mutateTaskDocument(root, options.id, (current, tx) => {
+    assertNotCancelled(current.status === 'blocked' ? { ...current, blockedFrom: undefined } : current);
+    if (current.status !== 'blocked') assertDynamicClaim(root, current);
     if (current.claim) {
       throw new TaskGraphError(
         'E_TASK_CLAIMED',
@@ -64,9 +65,9 @@ export function claimTask(root: string, options: ClaimTaskOptions): TaskDocument
         ],
       );
     }
-    return withClaim(current, identity, at, CLAIM_EVENTS.claimed, options.actor ?? null, {
+    return beginBlockedRepair(root, withClaim(current, identity, at, CLAIM_EVENTS.claimed, options.actor ?? null, {
       previousClaim: null,
-    });
+    }), tx, options);
   });
 }
 
@@ -109,9 +110,9 @@ export function reassignClaim(root: string, options: ReassignClaimOptions): Task
   const at = timestampOf(options.now);
   const takeover = options.takeover === true;
 
-  return mutateTaskDocument(root, options.id, (current) => {
-    assertNotCancelled(current);
-    assertDynamicClaim(root, current);
+  return mutateTaskDocument(root, options.id, (current, tx) => {
+    assertNotCancelled(current.status === 'blocked' ? { ...current, blockedFrom: undefined } : current);
+    if (current.status !== 'blocked') assertDynamicClaim(root, current);
     if (takeover && !current.claim) {
       throw new TaskGraphError(
         'E_NO_CLAIM',
@@ -119,7 +120,7 @@ export function reassignClaim(root: string, options: ReassignClaimOptions): Task
         ['Use `task-graph task claim` or `task-graph task reassign` to assign it.'],
       );
     }
-    return withClaim(
+    return beginBlockedRepair(root, withClaim(
       current,
       identity,
       at,
@@ -129,7 +130,7 @@ export function reassignClaim(root: string, options: ReassignClaimOptions): Task
         previousClaim: current.claim,
         ...(options.reason === undefined ? {} : { reason: options.reason }),
       },
-    );
+    ), tx, options);
   });
 }
 

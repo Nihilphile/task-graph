@@ -261,7 +261,7 @@ test('US-013: composite commands work through the CLI', () => {
     { cwd: workspace.root },
   );
   assert.equal(completion.code, 0, completion.stderr);
-  assert.match(completion.stdout, /Completion targets for T-0001: T-0002/);
+  assert.match(completion.stdout, /id: T-0001[\s\S]*completionRequires:[\s\S]*T-0002/);
 
   const start = runCliProcess(['task', 'start', 'T-0001'], { cwd: workspace.root });
   assert.equal(start.code, 0, start.stderr);

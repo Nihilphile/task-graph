@@ -10,6 +10,12 @@
 
 完整示例、批量计划范围、材料清单与旧命令映射见 [资源地址 CLI](references/resource-cli.md)。单图且没有 `parent_task` 的计划用 `'graph[G-001].task' add --from`；包含 `parent_task` 或跨图的计划用 `task add --from`。显式父任务创建用 `task add --parent-task`。
 
+默认查询返回任务摘要和完整文件索引，写入返回本次变更；`--detail` 获取扩展元数据，正文用 `--expand` 显式选择。字段与调用方迁移见 [CLI 输出约定](references/cli-output.md)。
+
+## 接手与受阻
+
+前置依赖或动态细化尚未完成时，`readiness=unready`，不能开工。执行中遇到问题则 `status=blocked`；blocked 本身不阻止接手。对 blocked 任务成功 start/reopen/claim/reassign 后，状态进入 in_progress，旧阻塞原因归档并返回 repair 回执；仍无法继续时再次 block，即使同一原因也会产生新的订阅通知。重审原交付用 review restart，接手修改交付则先 start 再 complete。
+
 ## 安装
 
 需要 Node.js；建议使用 Node.js 22 或更高版本进行开发和测试。CLI 运行要求见 `package.json`。GitHub 同步另外需要已登录的 GitHub CLI (`gh`)。

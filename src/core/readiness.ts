@@ -8,7 +8,7 @@ import { planningState } from './refinement.js';
  * Readiness is derived state: it is never written back to task Markdown, only
  * into the generated projection and the HTML viewer.
  */
-export type Readiness = 'ready' | 'blocked';
+export type Readiness = 'ready' | 'unready';
 
 /** One reason a task is not ready to start. */
 export type BlockedReason =
@@ -34,7 +34,8 @@ export interface TaskReadiness {
  *
  * A full dependency is satisfied only when the predecessor is `done`; a partial
  * dependency is satisfied when every task of the referenced completion point is
- * `done`; manual blockers always block. Derives relations never participate.
+ * `done`. Manual obstacles belong to status=blocked and do not prevent repair
+ * from starting. Derives relations never participate.
  */
 export function computeReadiness(
   repository: TaskRepository,
@@ -48,7 +49,7 @@ export function computeReadiness(
     if (task.planning !== 'dynamic') { result.set(task.id, state); continue; }
     const plan = planningState(task, repository);
     const blockedBy: BlockedReason[] = [...state.blockedBy, ...(plan === 'refined' || task.status === 'done' || task.status === 'cancelled' ? [] : [{ kind: 'refinement' as const, state: plan }])];
-    result.set(task.id, { readiness: blockedBy.length ? 'blocked' : 'ready', blockedBy, planningState: plan });
+    result.set(task.id, { readiness: blockedBy.some(b => b.kind !== 'manual') ? 'unready' : 'ready', blockedBy, planningState: plan });
   }
   return result;
 }
@@ -85,9 +86,9 @@ export function readinessFor(
   for (const text of task.manualBlockers) {
     blockedBy.push({ kind: 'manual', text });
   }
-  if (task.status === 'blocked' && !task.manualBlockers.length) blockedBy.push({ kind: 'manual', text: task.blockedFrom === 'pending_review' ? '审查受阻；查看报告或运行错误后使用 review restart' : '任务已阻塞；解除阻塞后继续' });
+  if (task.status === 'blocked' && !task.manualBlockers.length) blockedBy.push({ kind: 'manual', text: task.blockedFrom === 'pending_review' ? '审查受阻；重审用 review restart，接手修复用 start' : '任务已受阻；使用 start 接手修复' });
 
-  return { readiness: blockedBy.length === 0 ? 'ready' : 'blocked', blockedBy };
+  return { readiness: blockedBy.some(b => b.kind !== 'manual') ? 'unready' : 'ready', blockedBy };
 }
 
 function statusOf(byId: ReadonlyMap<string, TaskDocument>, id: string): TaskStatus | undefined {
@@ -97,7 +98,7 @@ function statusOf(byId: ReadonlyMap<string, TaskDocument>, id: string): TaskStat
 /** Human-readable one-line summary used by the CLI and tests. */
 export function describeReadiness(readiness: TaskReadiness): string {
   if (readiness.readiness === 'ready') return 'ready';
-  return `blocked by ${readiness.blockedBy.map(describeBlockedReason).join(', ')}`;
+  return `unready: ${readiness.blockedBy.filter(b => b.kind !== 'manual').map(describeBlockedReason).join(', ')}`;
 }
 
 function describeBlockedReason(reason: BlockedReason): string {

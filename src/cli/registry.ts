@@ -49,6 +49,7 @@ export function createRegistry(): readonly CommandSpec[] {
     validateCommand(),
     buildCommand(),
   );
+  for (let i = 0; i < commands.length; i++) commands[i] = { ...commands[i]!, usage: commands[i]!.usage + ' [--detail]' };
   commands.push(createHelpCommand(commands));
   return commands;
 }

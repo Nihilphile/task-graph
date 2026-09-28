@@ -19,9 +19,9 @@ test('error-book appends each rejection atomically, preserves snapshots after re
   const w = useTempWorkspace(t, 'error-book');
   initializeProject(w.root, { name: 'Errors', task: 'Parent' });
   const run = runner(w.root);
-  const discovery = await run('graph[G-001]', 'describe');
+  const discovery = await run('graph[G-001]', 'describe', '--detail');
   assert.ok(discovery.children.includes('graph[G-001].errorbook'));
-  assert.deepEqual((await run('graph[G-001].errorbook', 'describe')).operations, ['list', 'show', 'describe']);
+  assert.deepEqual((await run('graph[G-001].errorbook', 'describe', '--detail')).operations, ['list', 'show', 'describe']);
   w.write('evidence.md', '# Evidence\nFailed empty input.');
   w.write('error.md', '# Empty input\n\nFailure: crashes.\nMode: missing boundary check.\nAnalysis: cover empty input before delivery.');
   const added = await run('task', 'add', '--summary', 'Reviewer', '--parent-task', 'T-0001', '--kind', 'acceptance');

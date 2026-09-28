@@ -3,8 +3,9 @@ import type { ParsedArgs } from '../args.js';
 import { resolveCwd } from '../paths.js';
 import { usageError } from '../../core/errors.js';
 import { configureGraphReview, configureReview, finishReview, recoverReviews, removeReviewRequirement, restartReview, startReview } from '../../core/review.js';
-import { readReviewState, reviewView, validateConfig, type ReviewConfig } from '../../core/review-state.js';
+import { currentReview, readReviewState, reviewView, validateConfig, type ReviewConfig } from '../../core/review-state.js';
 import { loadTaskRepository } from '../../core/repo.js';
+import { emitResult, fileView, reviewSummary } from '../output.js';
 
 function config(args: ParsedArgs): Partial<ReviewConfig> {
   const value: Record<string, string | number> = {};
@@ -14,15 +15,25 @@ function config(args: ParsedArgs): Partial<ReviewConfig> {
 }
 const RUN_FLAGS = '[--model <model>] [--reasoning low|medium|high|xhigh] [--executable <absolute-path>] [--timeout-minutes <number>]';
 const CONFIG_FLAGS = `${RUN_FLAGS} [--mode snapshot|live]`;
+const REVIEW_NOTES = {
+  start: ['Requires a completed task and valid RR. Queues review without enabling auto-review.', 'Configuration priority: call > task > project > built-in defaults.'],
+  restart: ['Requires a failed/blocked round and exited prior processes. Preserves delivery and frozen RR; queues a new round.'],
+  finish: ['Only the current running round may submit. A non-empty report is required; reject also requires --error-report. Repeated identical submission is idempotent.'],
+  status: ['Read-only current review status. --detail adds frozen materials, configuration and prior runs.'],
+  recover: ['Reconcile interrupted or dead review workers, or adopt a confirmed live legacy reviewer. Does not resubmit completed work.'],
+  configure: ['Set task overrides for future review runs; active review requirements/configuration stay fixed.'],
+};
 export function reviewCommands(): CommandSpec[] {
   return [
     ...(['start', 'restart', 'finish', 'status', 'recover', 'configure'] as const).map((action): CommandSpec => ({
       name: `task review ${action}`, summary: `${action} an independent task review`,
       usage: `task-graph task review ${action} T-NNNN ${action === 'finish' ? '--review-id <UUID> --result pass|reject|blocked --report <file> [--error-report <Markdown>]' : action === 'restart' ? RUN_FLAGS : ['start', 'configure'].includes(action) ? CONFIG_FLAGS : ''} [--cwd <dir>] [--json]`,
-      details: ['Manual start requires a completed task and valid review-requirement files; it reopens the acceptance gate.', 'Configuration priority: this invocation > task > project defaults > gpt-6-sol/xhigh. Different tasks run independently.', 'Restart only failed/blocked runs after old processes exit; it preserves delivery and requirement snapshots. finish is round-checked and idempotent.'],
+      details: REVIEW_NOTES[action],
       run(ctx, args) {
         const root = resolveCwd(ctx, args), id = args.positionals[0];
         if (!id || !loadTaskRepository(root).taskById(id)) throw usageError('Pass an existing task ID');
+        const beforeStatus = loadTaskRepository(root).taskById(id)!.status;
+        let recovered: string[] | undefined;
         if (action === 'start') startReview(root, { id, config: config(args), actor: args.opt('actor') });
         if (action === 'restart') {
           const overrides = config(args);
@@ -30,15 +41,20 @@ export function reviewCommands(): CommandSpec[] {
           restartReview(root, id, overrides);
         }
         if (action === 'configure') configureReview(root, id, undefined, config(args));
-        if (action === 'recover') recoverReviews(root, id);
+        if (action === 'recover') recovered = recoverReviews(root, id);
         if (action === 'finish') {
           const reviewId = args.opt('review-id'), result = args.opt('result'), report = args.opt('report');
           if (!reviewId || !report || !['pass', 'reject', 'blocked'].includes(result ?? '')) throw usageError('Pass --review-id, --result pass|reject|blocked and --report');
           finishReview(root, { id, reviewId, report, result: result as 'pass' | 'reject' | 'blocked', errorReport: args.opt('error-report') });
         }
         const state = readReviewState(root), review = reviewView(root, id);
-        ctx.io.out(JSON.stringify({ ok: true, task: { id, status: loadTaskRepository(root).taskById(id)!.status }, review,
-          ...(action === 'status' ? { runs: state.runs.filter(r => r.task === id).map(r => ({ id: r.id, state: r.state, submission: r.submission, report: r.report, log: r.log, worker_pid: r.workerPid, child_pid: r.childPid, error: r.error })) } : {}) }, null, 2));
+        const status = loadTaskRepository(root).taskById(id)!.status, run = currentReview(state, id);
+        const selected = args.flag('detail') ? review : action === 'configure' ? { config: Object.fromEntries(Object.keys(config(args)).map(k => [k, review.config[k as keyof ReviewConfig]])) }
+          : action === 'finish' ? { id: run!.id, result: run!.state, report: fileView({ ...run!.report!, mode: 'snapshot' }), ...(run!.errorReport ? { error_report: fileView({ ...run!.errorReport, mode: 'snapshot' }) } : {}) }
+          : reviewSummary(root, id);
+        emitResult(ctx, args, { ok: true, task: { id, status }, review: selected,
+          ...(action === 'recover' ? { recovery: { outcome: recovered?.length ? 'recovered' : status !== beforeStatus ? 'adopted' : 'unchanged', ...(recovered?.length ? { runs: recovered } : {}) } } : {}),
+          ...(args.flag('detail') && action === 'status' ? { runs: state.runs.filter(r => r.task === id).map(r => ({ id: r.id, state: r.state, submission: r.submission, report: r.report, log: r.log, worker_pid: r.workerPid, child_pid: r.childPid, error: r.error })) } : {}) });
         return 0;
       },
     })),
@@ -49,7 +65,10 @@ export function reviewCommands(): CommandSpec[] {
         const root = resolveCwd(ctx, args), id = args.positionals[0];
         if (!id || !loadTaskRepository(root).taskById(id)) throw usageError('Pass an existing task ID');
         if (action !== 'status') configureReview(root, id, action === 'enable', config(args));
-        ctx.io.out(JSON.stringify({ ok: true, task: { id }, review: reviewView(root, id) }, null, 2)); return 0;
+        const view = reviewView(root, id), overrides = action === 'enable' ? config(args) : {};
+        emitResult(ctx, args, { ok: true, task: { id }, review: args.flag('detail') ? view : { enabled: view.enabled,
+          ...(view.explicitly_disabled ? { explicitly_disabled: true } : {}),
+          ...(Object.keys(overrides).length ? { config: Object.fromEntries(Object.keys(overrides).map(k => [k, view.config[k as keyof ReviewConfig]])) } : {}) } }); return 0;
       },
     })),
     { name: 'graph auto-review enable', summary: 'Scan eligible tasks once; preserve explicit disables',
@@ -57,20 +76,22 @@ export function reviewCommands(): CommandSpec[] {
       run(ctx, args) {
         const id = args.positionals[0]; if (!id) throw usageError('Pass a graph ID');
         const result = configureGraphReview(resolveCwd(ctx, args), id, args.flag('recursive'), config(args));
-        ctx.io.out(JSON.stringify({ ok: true, ...result }, null, 2)); return 0;
+        emitResult(ctx, args, { ok: true, ...result }); return 0;
       } },
     { name: 'graph auto-review status', summary: 'Show automatic review policies for this graph',
       usage: 'task-graph graph auto-review status G-NNN [--cwd <dir>] [--json]',
       run(ctx, args) {
         const root = resolveCwd(ctx, args), id = args.positionals[0], repo = loadTaskRepository(root);
         if (!id || !repo.manifest.graphs.some(g => g.id === id)) throw usageError('Pass an existing graph ID');
-        ctx.io.out(JSON.stringify({ ok: true, graph: id, tasks: repo.tasks.filter(t => t.graph === id).map(t => ({ id: t.id, ...reviewView(root, t.id) })) }, null, 2)); return 0;
+        const state = readReviewState(root);
+        emitResult(ctx, args, { ok: true, graph: id, tasks: repo.tasks.filter(t => t.graph === id).map(t => ({ id: t.id,
+          ...(args.flag('detail') ? reviewView(root, t.id) : { enabled: state.tasks[t.id]?.enabled ?? false, ...(state.tasks[t.id]?.disabled ? { explicitly_disabled: true } : {}) }) })) }); return 0;
       } },
     { name: 'review configure', summary: 'Configure project defaults for future review runs',
       usage: `task-graph review configure ${CONFIG_FLAGS} [--cwd <dir>] [--json]`,
-      run(ctx, args) { const root = resolveCwd(ctx, args); configureReview(root, undefined, undefined, config(args)); ctx.io.out(JSON.stringify({ ok: true, defaults: readReviewState(root).defaults })); return 0; } },
+      run(ctx, args) { const root = resolveCwd(ctx, args); configureReview(root, undefined, undefined, config(args)); emitResult(ctx, args, { ok: true, defaults: args.flag('detail') ? readReviewState(root).defaults : config(args) }); return 0; } },
     { name: 'task review-requirement remove', summary: 'Remove an RR binding; enabled tasks must retain valid RR',
       usage: 'task-graph task review-requirement remove T-NNNN --path <file> [--cwd <dir>] [--json]',
-      run(ctx, args) { const id = args.positionals[0], file = args.opt('path'); if (!id || !file) throw usageError('Pass task ID and --path'); removeReviewRequirement(resolveCwd(ctx, args), id, file); ctx.io.out(JSON.stringify({ ok: true, task: { id } })); return 0; } },
+      run(ctx, args) { const id = args.positionals[0], file = args.opt('path'); if (!id || !file) throw usageError('Pass task ID and --path'); removeReviewRequirement(resolveCwd(ctx, args), id, file); emitResult(ctx, args, { ok: true, task: { id }, removed: file }); return 0; } },
   ];
 }

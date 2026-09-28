@@ -1,6 +1,13 @@
 import { EXIT_OK, type CliContext, type CommandSpec } from '../context.js';
 import { usageError } from '../../core/errors.js';
 import { claimTask, reassignClaim, releaseClaim, formatClaim } from '../../core/claims.js';
+import { emitResult } from '../output.js';
+import type { ParsedArgs } from '../args.js';
+import type { TaskDocument } from '../../core/task.js';
+import { repairReceipt } from '../../core/repair.js';
+import { taskContext } from '../../core/task-context.js';
+import { contextView } from '../output.js';
+import { executionGuidance } from '../execution-guidance.js';
 import { resolveCwd } from '../paths.js';
 
 /** The `task claim|release|reassign` commands. */
@@ -19,6 +26,7 @@ function claimCommand(): CommandSpec {
       '--execution-id is optional supplementary metadata and never replaces --session-id.',
       'An existing claim is never overwritten silently: use `task reassign` or `task release` first.',
       'Nothing expires a claim automatically; release is always explicit.',
+      'Accepting a blocked task also enters in_progress and returns repair context; prerequisites still apply.',
     ],
     run(ctx: CliContext, args): number {
       const root = resolveCwd(ctx, args);
@@ -72,6 +80,7 @@ function reassignCommand(): CommandSpec {
       'Both paths record the previous and new claim identities plus the actor and timestamp.',
       '--takeover requires an existing claim; a plain reassign may assign an unclaimed task.',
       'Claims are never expired by a timeout, so a handover is always an explicit decision.',
+      'Reassigning blocked work begins repair in_progress and archives prior waiting reasons.',
     ],
     run(ctx: CliContext, args): number {
       const root = resolveCwd(ctx, args);
@@ -111,19 +120,14 @@ function requirePositional(
 
 function report(
   ctx: CliContext,
-  args: { flag(name: string): boolean },
+  args: ParsedArgs,
   message: string,
-  task: { id: string; status: string; title: string; claim: unknown },
+  task: TaskDocument,
 ): void {
-  if (args.flag('json')) {
-    ctx.io.out(
-      JSON.stringify(
-        { ok: true, task: { id: task.id, status: task.status, title: task.title, claim: task.claim } },
-        null,
-        2,
-      ),
-    );
-  } else if (!args.flag('quiet')) {
-    ctx.io.out(message);
-  }
+  const repair = repairReceipt(task);
+  const guidance = repair ? executionGuidance() : undefined;
+  emitResult(ctx, args, { ok: true, task: { id: task.id, status: task.status,
+    ...(args.flag('detail') ? { title: task.title, claim: task.claim } : { claim: task.claim ? { role: task.claim.role, sessionId: task.claim.sessionId } : null }) },
+    ...(repair ? { repair, context: contextView(taskContext(resolveCwd(ctx, args), task), args.flag('detail')),
+      guidance: args.flag('detail') ? guidance : { skill_path: guidance!.skill_path, message: 'Read task-take and the previous blockers; record context readiness, then repair.' } } : {}) });
 }

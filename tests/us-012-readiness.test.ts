@@ -58,14 +58,14 @@ test('US-012: a todo task with satisfied dependencies is Ready', () => {
 
   // A dependency is satisfied only when the predecessor is done.
   startTask(workspace.root, { id: predecessor.id, now: fixedClock() });
-  assert.equal(readinessOf(workspace, successor.id).readiness, 'blocked');
+  assert.equal(readinessOf(workspace, successor.id).readiness, 'unready');
   completeTask(workspace.root, { id: predecessor.id, now: fixedClock() });
 
   assert.deepEqual(readinessOf(workspace, successor.id), { readiness: 'ready', blockedBy: [] });
   assert.deepEqual(readinessOf(workspace, 'T-0001'), { readiness: 'ready', blockedBy: [] });
 });
 
-test('US-012: unsatisfied dependencies and manual blockers compute as Blocked', () => {
+test('US-012: unsatisfied dependencies are unready; manual obstacles are reported separately', () => {
   const workspace = useTempWorkspace(test, 'us-012-blocked');
   seed(workspace);
   const predecessor = addTask(workspace.root, { graph: 'G-001', title: '前置', now: fixedClock() });
@@ -74,7 +74,7 @@ test('US-012: unsatisfied dependencies and manual blockers compute as Blocked', 
   addManualBlocker(workspace.root, { id: successor.id, reason: '等待法务审批' });
 
   assert.deepEqual(readinessOf(workspace, successor.id), {
-    readiness: 'blocked',
+    readiness: 'unready',
     blockedBy: [
       { kind: 'task', task: predecessor.id },
       { kind: 'manual', text: '等待法务审批' },
@@ -132,7 +132,7 @@ test('US-012: manual blockers can be added and removed by command', () => {
 
   const blocked = addManualBlocker(workspace.root, { id: task.id, reason: '等待硬件到位' });
   assert.deepEqual(blocked.manualBlockers, ['等待硬件到位']);
-  assert.equal(readinessOf(workspace, task.id).readiness, 'blocked');
+  assert.equal(readinessOf(workspace, task.id).readiness, 'ready');
 
   const beforeDuplicate = workspace.read(`.task-graph/tasks/${task.id}.md`);
   assert.throws(
@@ -176,7 +176,7 @@ test('US-012: readiness and blocked_by never appear in task Markdown', () => {
   assert.equal(after.includes('manual_blockers:\n  - 等待审批'), true);
 
   const projected = projectedTasks(workspace).find((entry) => entry.id === successor.id);
-  assert.equal(projected?.readiness, 'blocked');
+  assert.equal(projected?.readiness, 'unready');
   assert.equal(projected?.blockedBy.length, 2);
 });
 
@@ -189,13 +189,13 @@ test('US-012: a predecessor status change updates readiness on the next build', 
 
   assert.equal(
     projectedTasks(workspace).find((entry) => entry.id === successor.id)?.readiness,
-    'blocked',
+    'unready',
   );
 
   startTask(workspace.root, { id: predecessor.id, now: fixedClock() });
   assert.equal(
     projectedTasks(workspace).find((entry) => entry.id === successor.id)?.readiness,
-    'blocked',
+    'unready',
   );
 
   completeTask(workspace.root, { id: predecessor.id, now: fixedClock() });
@@ -213,7 +213,7 @@ test('US-012: a predecessor status change updates readiness on the next build', 
   buildProject(workspace.root);
   assert.equal(
     projectedTasks(workspace).find((entry) => entry.id === successor.id)?.readiness,
-    'blocked',
+    'unready',
   );
 });
 

@@ -5,7 +5,7 @@ export const VIEWER_JS = String.raw`
   var STATUS_ORDER = ["todo", "in_progress", "blocked", "pending_review", "reviewing", "done", "reject", "cancelled"];
   var STATUS_LABEL = { blocked: "受阻", todo: "Todo", in_progress: "Running", pending_review: "待审查", reviewing: "审查中", done: "Finished", reject: "Rejected", cancelled: "Cancelled" };
   var STATUS_ICON = { done: "\u2713", in_progress: "\u25cf", cancelled: "\u00d7" };
-  var READINESS_ICON = { ready: "\u25b6", blocked: "!" };
+  var READINESS_ICON = { ready: "\u25b6", unready: "◷" };
   var TARGET_MARKER = "\u25c6";
   var NODE_W = 220, NODE_H = 76, GAP_X = 110, GAP_Y = 60, PAD = 36;
   var SOURCE_LANE = NODE_W + GAP_X;
@@ -48,7 +48,7 @@ export const VIEWER_JS = String.raw`
     if (task.status === "cancelled") return "cancelled";
     if (task.status === "done") return "done";
     if (task.status === "in_progress") return "running";
-    return task.readiness === "ready" ? "ready" : "blocked";
+    return task.readiness === "ready" ? "ready" : "unready";
   };
   var nodeIcon = function (task) {
     if (task.status === 'blocked') return '!';
@@ -232,7 +232,7 @@ export const VIEWER_JS = String.raw`
     });
     var readinessBox = document.getElementById("readiness-filters");
     readinessBox.innerHTML = "";
-    ["ready", "blocked"].forEach(function (value) {
+    ["ready", "unready"].forEach(function (value) {
       var label = document.createElement("label");
       var input = document.createElement("input");
       input.type = "checkbox";
@@ -501,7 +501,7 @@ export const VIEWER_JS = String.raw`
     group.appendChild(title);
     var meta = svgEl("text", { class: "meta", x: 14 * s, y: metrics.metaY, style: 'font-size:' + 11 * s + 'px' });
     var planLabel = { skeleton: '骨架', awaiting_review: '待主控细化', refined: '已细化', stale: '需重新细化' };
-    meta.textContent = (task.status === 'blocked' ? '受阻：' + ((task.manualBlockers || [])[0] || '查看阻塞原因').slice(0, 16) : planLabel[task.planningState] || (task.readiness === 'blocked' ? '存在阻塞' : '依赖已满足')) + ' · ' + task.dependsOn.length + ' 个依赖';
+    meta.textContent = (task.status === 'blocked' ? '受阻：' + ((task.manualBlockers || [])[0] || '查看阻塞原因').slice(0, 16) : planLabel[task.planningState] || (task.readiness === 'unready' ? '前置条件未满足' : '依赖已满足')) + ' · ' + task.dependsOn.length + ' 个依赖';
     group.appendChild(meta);
     if (task.claim) {
       var claimText = task.claim.role + " / " + task.claim.sessionId;

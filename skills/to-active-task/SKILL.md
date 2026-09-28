@@ -59,7 +59,7 @@ description: >-
 - `task list --available`：哪些待办已满足工具的开工条件；其中可能包含负责统筹的父任务。
 - `'graph[<图ID>].task[<ID>]' show --manifest`：任务事实、当前要求和参考资料的地址清单。
 
-`context.contents` 列出全部当前要求，`context.review_requirements` 列出独立验收要求，`context.references` 保留参考的摘要和来源。`read_path` 相对 `context.project_root`，固定版本指向快照。可根据问题选择要读的文件，遵守 excluded 和项目交接约定；需要 CLI 展开正文时可用 `--expand-path <路径>`，体量预览用 `--preview`。
+`context.contents` 列出全部当前要求，`context.review_requirements` 列出独立验收要求，`context.references` 保留参考的摘要和来源。`read_path` 相对 `context.project_root`，固定版本指向快照。可根据问题选择要读的文件，遵守用途排除和项目交接约定（默认 excluded_count，--detail 查看排除原因）；需要 CLI 展开正文时可用 `--expand-path <路径>`，体量预览用 `--preview`。
 
 ### 用节点和关系表达当前理解
 
@@ -97,11 +97,11 @@ CLI 'graph[<图ID>].task[<ID>].content' attach --path docs/tasks/details.md --su
 
 ### 让执行者取得上下文，自主推进
 
-派工提供实际项目/checkout 路径、CLI 路径和完整任务地址（含 graph ID 与 task ID）。执行者使用 start/show 返回的 [task-take](../task-take/SKILL.md)，读取全部要求和必要参考，记录上下文确认后自主施工，无须主控二次许可。start/claim 登记实际执行会话，同一次开始由一方记录。
+派工提供实际项目/checkout 路径、CLI 路径和完整任务地址（含 graph ID 与 task ID）。执行者使用 start 或 show --detail 返回的 [task-take](../task-take/SKILL.md)，读取全部要求和必要参考，记录上下文确认后自主施工，无须主控二次许可。start/claim 登记实际执行会话，同一次开始由一方记录。
 
 主控亲自承担统筹任务时也使用自己的会话记录 start；父任务需要先进入 in_progress，才能最终 complete。父子职责根据任务内容区分。
 
-希望后续任务使用哪些交付知识，可以在当前要求中说明。执行者用 reference 登记实际入口，后继沿直接依赖取得；主控据此阅读必要代码或材料。工作记录中的缺口和任务的 block 操作可帮助定位无法推进的原因。block 保存 blocked 状态与原因，解除最后一个原因后恢复原阶段；审查受阻通过 review restart 恢复。
+希望后续任务使用哪些交付知识，可以在当前要求中说明。执行者用 reference 登记实际入口，后继沿直接依赖取得；主控据此阅读必要代码或材料。工作记录中的缺口和任务的 block 操作可帮助定位无法推进的原因。block 保存 blocked 状态与原因，解除最后一个原因后恢复原阶段；接手 blocked 修复时先 start/reassign 进入 in_progress，原原因归档；仍有问题就再次 block，让主控收到新一轮通知。unready 表示依赖或细化门槛未满足，仍不能开工。审查受阻重跑同一交付用 review restart，修改交付则先接手修复再 complete。
 
 ### 用验收结果支持后续判断
 

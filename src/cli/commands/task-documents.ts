@@ -2,6 +2,7 @@ import { EXIT_OK, type CommandSpec } from '../context.js';
 import { attachDocument, createHandoff, removeContent, setDocumentAudience } from '../../core/documents.js';
 import { usageError } from '../../core/errors.js';
 import { resolveCwd } from '../paths.js';
+import { attachmentView, emitResult, visibleOutputs } from '../output.js';
 
 export function taskDocumentCommands(): readonly CommandSpec[] {
   return [
@@ -17,8 +18,8 @@ export function taskDocumentCommands(): readonly CommandSpec[] {
         const audience = args.opt('audience');
         if (audience !== undefined && audience !== 'agent' && audience !== 'user') throw usageError('--audience must be agent or user');
         const task = attachDocument(resolveCwd(ctx, args), { id, kind, path: file, title: args.opt('title'), summary: args.opt('summary'), audience, snapshot: args.flag('snapshot'), actor: args.opt('actor'), now: () => ctx.now() });
-        if (args.flag('json')) ctx.io.out(JSON.stringify({ ok: true, task: { id, outputs: task.outputs } }, null, 2));
-        else if (!args.flag('quiet')) ctx.io.out(`Attached ${kind} to ${id}: ${file}`);
+        emitResult(ctx, args, { ok: true, task: { id, ...(args.flag('detail') ? { outputs: visibleOutputs(task.outputs) } : {}) },
+          attachment: attachmentView(task.outputs.at(-1)!, args.flag('detail')) });
         return EXIT_OK;
       },
     })),
@@ -29,7 +30,7 @@ export function taskDocumentCommands(): readonly CommandSpec[] {
         const id = args.positionals[0], file = args.opt('path');
         if (!id || !file) throw usageError('Pass task ID and --path');
         removeContent(resolveCwd(ctx, args), { id, path: file, actor: args.opt('actor'), now: () => ctx.now() });
-        if (args.flag('json')) ctx.io.out(JSON.stringify({ ok: true, task: { id } }));
+        emitResult(ctx, args, { ok: true, task: { id }, removed: file });
         return EXIT_OK;
       },
     },
@@ -41,8 +42,7 @@ export function taskDocumentCommands(): readonly CommandSpec[] {
         const id = args.positionals[0], file = args.opt('path'), audience = args.opt('audience');
         if (!id || !file || !audience) throw usageError('Pass task ID, --path and --audience.');
         setDocumentAudience(resolveCwd(ctx, args), { id, path: file, audience, actor: args.opt('actor'), now: () => ctx.now() });
-        if (args.flag('json')) ctx.io.out(JSON.stringify({ ok: true, task: { id }, path: file, audience }, null, 2));
-        else if (!args.flag('quiet')) ctx.io.out(`Audience ${audience}: ${id} ${file}`);
+        emitResult(ctx, args, { ok: true, task: { id }, path: file, audience });
         return EXIT_OK;
       },
     },
@@ -54,8 +54,8 @@ export function taskDocumentCommands(): readonly CommandSpec[] {
         const id = args.positionals[0];
         if (!id) throw usageError('Pass a task ID.');
         const task = createHandoff(resolveCwd(ctx, args), { id, title: args.opt('title'), summary: args.opt('summary'), actor: args.opt('actor'), now: () => ctx.now() });
-        if (args.flag('json')) ctx.io.out(JSON.stringify({ ok: true, task: { id, outputs: task.outputs } }, null, 2));
-        else if (!args.flag('quiet')) ctx.io.out(`Saved handoff for ${id}`);
+        emitResult(ctx, args, { ok: true, task: { id, ...(args.flag('detail') ? { outputs: visibleOutputs(task.outputs) } : {}) },
+          handoff: attachmentView(task.outputs.at(-1)!, args.flag('detail')) });
         return EXIT_OK;
       },
     },

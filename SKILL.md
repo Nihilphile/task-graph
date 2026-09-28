@@ -29,7 +29,7 @@ description: >-
 - **任务（task）**：一项可交付工作，自动分配 ID，例如 `T-0001`。摘要显示在节点上，完整要求放在你编写的 Markdown 文件中。
 - **图（graph）**：一组任务及它们的关系，自动分配 ID，例如 `G-001`。入口图是浏览起点；某个任务下面的细分工作放在子图中，该任务称为复合任务。
 - **依赖（depends_on）**：例如 B 依赖 A，表示 A 完成后 B 才能开始。一个任务可依赖多个前置任务，所有依赖都满足才就绪。工具拒绝循环依赖。
-- **状态与就绪**：`status` 是已记录的 todo（待开始）、in_progress（执行中）、blocked（受阻）、pending_review（待审查）、reviewing（审查中）、done（通过/完成）、reject（未通过）、cancelled（取消）；`readiness` 综合依赖、人工阻塞和动态任务的细化门槛计算 ready 或 blocked。ready 本身不表示任务待执行。
+- **状态与就绪**：`status` 是已记录的 todo（待开始）、in_progress（执行中）、blocked（受阻）、pending_review（待审查）、reviewing（审查中）、done（通过/完成）、reject（未通过）、cancelled（取消）；`readiness` 只按依赖和动态任务细化门槛计算 ready 或 unready。unready 表示前置条件未满足，不能 start；blocked 表示执行中遇到问题，本身不阻止接手修复。ready 不表示任务已完成或没有执行问题。
 - **领取（claim）**：记录由哪个角色、哪个实际 Agent 会话负责。领取本身不启动 Agent。
 - **交接（handoff）**：默认提供任务事实及文件索引，按需显式展开正文；保存快照时冻结当前要求并保留附件索引。
 - **参考（reference）**：任务提供给后继 Agent 的代码索引或接入说明。文件由产出任务登记，后继沿直接依赖读取；与同一任务接续执行的 handoff 分开。
@@ -113,7 +113,7 @@ CLI 'graph[G-001].task' add --summary "独立验证" --content doc/tasks/verific
 
 多依赖用重复的 `--depends-on`，最终保存为数组。CLI 管理编号、状态和关系；`--content` 指向的文件就是执行者与 HTML 共用的完整要求，无须再写一份重复的派工正文。
 
-`--content` 可重复传入，批量计划 content 可为路径数组。后续通过 `'task[T-0001].content' attach --path <文件> --summary "用途"` 增量补充；context.contents 列出全部当前要求，context.content 保留第一个入口兼容旧调用。全部文件共同生效，移除绑定用 `'task[T-0001].content' remove`，原文件保留。动态任务创建时加 `--planning dynamic`，由主控在依赖满足并评估输入后 `'task[T-0001]' refine --reason "判断依据"`，再派工；待评估列表用 `task list --needs-refinement`。
+`--content` 可重复传入，批量计划 content 可为路径数组。后续通过 `'task[T-0001].content' attach --path <文件> --summary "用途"` 增量补充；context.contents 列出全部当前要求，`--detail` 时 context.content 保留第一个入口兼容旧调用。全部文件共同生效，移除绑定用 `'task[T-0001].content' remove`，原文件保留。动态任务创建时加 `--planning dynamic`，由主控在依赖满足并评估输入后 `'task[T-0001]' refine --reason "判断依据"`，再派工；待评估列表用 `task list --needs-refinement`。
 
 路径规则：`--content`、报告及日志的 `--path`、`--report` 都相对项目根目录，绑定时文件须已存在。只有批量计划的 `--from` 路径相对命令调用时的工作目录；传绝对路径可避免混淆。
 
@@ -141,9 +141,9 @@ CLI 'task[T-0001].log' add --text "实现完成，正在验证" --cwd "<项目�
 
 `start` 同时领取、改为执行中并保存交接快照；role/session-id 成对提供。它会拒绝未就绪任务和冲突的领取。执行者自行开始时同样使用自己的实际会话 ID；同一次执行由主控或执行者中的一方记录开始即可。
 
-`start/reopen/show` 的成功响应还返回 `guidance.skill_path`：随工具提供的 [task-take](skills/task-take/SKILL.md) 的实际绝对路径。主控派工时让执行者读取该指南即可；已由主控 start 的执行者用 show 恢复，避免重复 start。task-take 负责阅读要求和必要参考、写接手记录后直接开工、记录缺口与阻塞，以及完工前登记后继所需 reference。接手记录不需要主控二次批准；交付信息回填工作记录和附件。指南路径只存在于 CLI 响应，不写入任务或交接快照。
+`start/reopen` 及 `show --detail` 的成功响应返回 `guidance.skill_path`：随工具提供的 [task-take](skills/task-take/SKILL.md) 的实际绝对路径。主控派工时让执行者读取该指南即可；已由主控 start 的执行者用 show 恢复，避免重复 start。task-take 负责阅读要求和必要参考、写接手记录后直接开工、记录缺口与阻塞，以及完工前登记后继所需 reference。接手记录不需要主控二次批准；交付信息回填工作记录和附件。指南路径只存在于 CLI 响应，不写入任务或交接快照。
 
-`'task[<任务ID>]' show`（包括 `--handoff`）默认仅返回任务事实和文件清单，可用 `--manifest` 明确指定。JSON 不再默认提供 task.body、历史正文和附件 body/html。任务地址的 `start/reopen` 同样返回 context，包含 project_root、content、references、reports、logs、handoffs、outputs 和 excluded。path 是原来源，read_path 是实际读取文件（可能是快照），均相对 project_root。条目保留 source_task、scope、mode 和可选 summary；不可读时有 error。参考、报告及普通产物收集自身和直接依赖，日志与交接只收集自身。
+`'task[<任务ID>]' show` 默认给任务事实和一套 context 文件清单；`--handoff` 改为 Markdown 索引。start/reopen 同样给 context，包含 project_root 和非空的 contents、review_requirements、references、reports、logs、handoffs、outputs。读取 read_path（相对 project_root），依赖材料有 source_task，条目保留 mode、摘要和读取错误。参考、报告及普通产物收集自身和直接依赖，日志与交接只收集自身。标签用 `list` 返回全部可见文件。`--detail` 增加审计元数据与旧字段，不自动展开正文。见 [CLI 输出约定](references/cli-output.md)。
 
 正文需显式选择：`'task[T-0001]' show --expand content --expand report --json`，或重复 `--expand-path <项目相对来源或快照路径>` 指定文件。加 `--handoff` 将同一选择排成 Markdown；加 `--preview` 先返回所选条目、字节数及字符数估计，不读附件正文。用重复的 `--exclude-path <精确路径>` 排除文件，排除优先于展开；不支持通配符。完整用法与兼容变化见主控接口参考。
 
@@ -170,7 +170,7 @@ CLI 'task[T-0001]' show --cwd "<项目根目录>" --json
 
 普通独立验收任务创建时加 `--kind acceptance`，依赖必要实现并纳入父任务完成目标。通过使用 `'task[<ID>]' complete --result pass --report <报告>`，失败用 `'task[<ID>]' reject --report <报告> --error-report <失败小报告.md>`；两者均须提供本轮报告。reject 保留证据、释放领取，并继续阻塞后继与父任务。修复后显式 reopen 复验；动态验收任务先由主控重新 refine。
 
-如果已有其他执行者领取，先核查其进展，需要接替时使用 `'task[T-0001]' reassign`；领取不会自动过期。遇到外部阻塞，使用 `'task[T-0001]' block --reason <原因>` 进入 blocked，保留领取与原阶段；用 unblock 移除最后一个原因后恢复原阶段。审查受阻使用 review restart 恢复。详细参数通过 `CLI help "命令名"` 查看。
+如果已有其他执行者领取，先核查其进展，需要接替时使用 `'task[T-0001]' reassign`；领取不会自动过期。遇到外部阻塞，使用 `'task[T-0001]' block --reason <原因>` 进入 blocked，保留领取与原阶段；用 unblock 移除最后一个原因后恢复原阶段。审查受阻重跑原交付用 review restart；接手修复用 start/reopen，成功后进入 in_progress。blocked 任务的 claim/reassign 也会开始修复；旧阻塞原因进入历史及 repair 回执，当前等待原因清空，未解决时再次 block（相同原因也可）会重新通知。依赖和 refinement 门槛仍须满足。详细参数通过 `CLI help "命令名"` 查看。
 
 ## 5. 阅读与交付 HTML
 

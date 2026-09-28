@@ -287,7 +287,7 @@ test('US-011: task link and task unlink work through the CLI', () => {
   runCliProcess(['task', 'add', '--graph', 'G-001', '--title', '后继'], { cwd: workspace.root });
 
   const link = runCliProcess(
-    ['task', 'link', 'T-0002', '--depends-on', 'T-0001', '--json'],
+    ['task', 'link', 'T-0002', '--depends-on', 'T-0001', '--json', '--detail'],
     { cwd: workspace.root },
   );
   assert.equal(link.code, 0, link.stderr);
@@ -317,7 +317,7 @@ test('US-011: task link and task unlink work through the CLI', () => {
     cwd: workspace.root,
   });
   assert.equal(unlink.code, 0, unlink.stderr);
-  assert.match(unlink.stdout, /Unlinked T-0001 from T-0002/);
+  assert.match(unlink.stdout, /id: T-0002[\s\S]*action: removed[\s\S]*task: T-0001/);
   assert.deepEqual(loadTaskRepository(workspace.root).taskById('T-0002')?.dependsOn, []);
 
   const unlinkAgain = runCliProcess(['task', 'unlink', 'T-0002', '--depends-on', 'T-0001'], {

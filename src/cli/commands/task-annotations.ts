@@ -1,7 +1,8 @@
-import { EXIT_OK, type CliContext, type CommandSpec } from '../context.js';
+import { EXIT_OK, type CommandSpec } from '../context.js';
 import { usageError } from '../../core/errors.js';
 import { addTaskOutput, addWorkLog, removeTaskOutput } from '../../core/annotations.js';
 import { resolveCwd } from '../paths.js';
+import { emitResult, visibleOutputs } from '../output.js';
 
 export function taskAnnotationCommands(): readonly CommandSpec[] {
   return [logCommand(), outputAddCommand(), outputRemoveCommand()];
@@ -18,7 +19,9 @@ function logCommand(): CommandSpec {
       const text = args.opt('text');
       if (text === undefined) throw usageError('Work log text is required', ['Pass --text <markdown>.']);
       const task = addWorkLog(resolveCwd(ctx, args), { id, text, actor: args.opt('actor'), now: () => ctx.now() });
-      report(ctx, args.flag('json'), args.flag('quiet'), `Logged work on ${id}`, { id: task.id, body: task.body, outputs: task.outputs });
+      const managed = task.outputs.find(o => o.path === `.task-graph/logs/${id}.md`);
+      emitResult(ctx, args, { ok: true, task: { id, ...(args.flag('detail') ? { outputs: visibleOutputs(task.outputs) } : {}) },
+        log: managed ? { read_path: managed.path } : { read_path: `.task-graph/tasks/${id}.md`, section: 'work_log' } });
       return EXIT_OK;
     },
   };
@@ -36,7 +39,7 @@ function outputAddCommand(): CommandSpec {
       const task = addTaskOutput(resolveCwd(ctx, args), {
         id, path: outputPath, note: args.opt('note'), actor: args.opt('actor'), now: () => ctx.now(),
       });
-      report(ctx, args.flag('json'), args.flag('quiet'), `Added output to ${id}: ${outputPath}`, { id: task.id, outputs: task.outputs });
+      emitResult(ctx, args, { ok: true, task: { id, ...(args.flag('detail') ? { outputs: visibleOutputs(task.outputs) } : {}) }, output: task.outputs.at(-1) });
       return EXIT_OK;
     },
   };
@@ -54,7 +57,7 @@ function outputRemoveCommand(): CommandSpec {
       const task = removeTaskOutput(resolveCwd(ctx, args), {
         id, path: outputPath, actor: args.opt('actor'), now: () => ctx.now(),
       });
-      report(ctx, args.flag('json'), args.flag('quiet'), `Removed output from ${id}: ${outputPath}`, { id: task.id, outputs: task.outputs });
+      emitResult(ctx, args, { ok: true, task: { id, ...(args.flag('detail') ? { outputs: visibleOutputs(task.outputs) } : {}) }, removed: outputPath });
       return EXIT_OK;
     },
   };
@@ -68,9 +71,4 @@ function requireId(id: string | undefined): string {
 function requirePath(value: string | undefined): string {
   if (value === undefined) throw usageError('An output path is required', ['Pass --path <path>.']);
   return value;
-}
-
-function report(ctx: CliContext, json: boolean, quiet: boolean, message: string, task: unknown): void {
-  if (json) ctx.io.out(JSON.stringify({ ok: true, task }, null, 2));
-  else if (!quiet) ctx.io.out(message);
 }

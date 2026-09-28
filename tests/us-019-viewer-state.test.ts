@@ -33,9 +33,12 @@ test('US-019: every task state carries a colour class and a non-colour indicator
   assert.equal(badge(running), '\u25cf', 'running work needs a non-colour indicator');
 
   const blocked = taskNode(page, ids.blocked);
-  assert.ok((blocked.getAttribute('class') ?? '').includes('readiness-blocked'));
+  assert.ok((blocked.getAttribute('class') ?? '').includes('status-blocked'));
   assert.equal(badge(blocked), '!', 'blocked work needs an exclamation indicator');
 
+  const unready = taskNode(page, ids.convergence);
+  assert.ok(unready.classList.contains('readiness-unready'));
+  assert.equal(badge(unready), '◷');
   const ready = taskNode(page, ids.ready);
   assert.ok((ready.getAttribute('class') ?? '').includes('readiness-ready'));
   assert.equal(badge(ready), '\u25b6', 'ready work needs a ready indicator');
@@ -48,11 +51,11 @@ test('US-019: every task state carries a colour class and a non-colour indicator
   assert.ok(css.includes('.node.status-done .node-body { fill:#e7f8ef; stroke:#12b76a; }'), 'green finished');
   assert.ok(css.includes('.node.status-in_progress .node-body { fill:#fffaeb; stroke:#f79009; }'), 'yellow running');
   assert.ok(
-    css.includes('.node.readiness-blocked:not(.status-done):not(.status-in_progress):not(.status-cancelled) .node-body { fill:#fef3f2; stroke:#f04438; }'),
+    css.includes('.node.status-blocked .node-body { fill:#fff1f0; stroke:#d92d20; stroke-width:2; }'),
     'red blocked',
   );
   assert.ok(
-    css.includes('.node.readiness-ready:not(.status-done):not(.status-in_progress):not(.status-cancelled) .node-body { fill:#eff4ff; stroke:#2f6feb; }'),
+    css.includes('.node.readiness-ready.status-todo .node-body { fill:#eff4ff; stroke:#2f6feb; }'),
     'blue ready',
   );
   assert.ok(
@@ -118,7 +121,7 @@ test('US-019: the side panel explains why a task is blocked', async (t) => {
   click(page, taskNode(page, ids.blocked));
   const text = page.document.getElementById('details-body')!.textContent ?? '';
   assert.ok(text.includes('等待设计稿'), 'the manual blocker text must be shown');
-  assert.ok(text.includes('blocked'), 'the computed readiness must be shown');
+  assert.ok(text.includes('ready'), 'the computed readiness must be shown');
 
   click(page, taskNode(page, ids.convergence));
   const convergence = page.document.getElementById('details-body')!.textContent ?? '';

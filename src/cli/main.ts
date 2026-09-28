@@ -38,6 +38,10 @@ export function defaultIo(): CliIo {
  */
 export async function main(argv: readonly string[], options: MainOptions = {}): Promise<number> {
   let io = options.io ?? defaultIo();
+  if (argv.includes('--quiet') || argv.includes('--quiet=true')) {
+    const target = io;
+    io = { ...target, out: text => { try { if (JSON.parse(text).ok === false) target.out(text); } catch { /* quiet suppresses successful text output */ } } };
+  }
   const commands = createRegistry();
   let ctx: CliContext = {
     desktopAdapter: options.desktopAdapter,
@@ -73,6 +77,13 @@ export async function main(argv: readonly string[], options: MainOptions = {}): 
       throw usageError(`Unknown command "${word}"`, ['Run `task-graph help` to list commands.']);
     }
     const args = parseArgs(argv, wordCount);
+    const allowed = new Set([...command.usage.matchAll(/--([a-z][a-z-]*)/g)].map(m => m[1]!));
+    for (const name of ['cwd', 'json', 'quiet', 'help', 'detail']) allowed.add(name);
+    if (command.name === 'task add') for (const name of ['title', 'goal', 'condition', 'work-log', 'blocker', 'derived-from']) allowed.add(name);
+    // Historical actor metadata is accepted by these review operations too.
+    if (command.name.startsWith('task review ')) allowed.add('actor');
+    for (const name of args.options.keys()) if (!allowed.has(name)) throw usageError(`Unknown option --${name} for ${command.name}`);
+    if (args.has('detail') && args.all('detail').some(v => !['true', 'false'].includes(v))) throw usageError('--detail accepts true or false');
     if (args.flag('help') && command.name !== 'help') {
       io.out(renderCommandHelp(command));
       return EXIT_OK;
@@ -118,12 +129,12 @@ export async function main(argv: readonly string[], options: MainOptions = {}): 
   } catch (error) {
     if (isTaskGraphError(error)) {
       if (argv.includes('--json') || argv.includes('--json=true')) io.out(JSON.stringify({ ok: false, error: { code: error.code, message: error.message, details: error.details } }, null, 2));
-      io.err(error.format());
+      if (!argv.includes('--json') && !argv.includes('--json=true')) io.err(error.format());
       return error.code === 'E_USAGE' ? EXIT_USAGE : EXIT_FAILURE;
     }
     const message = error instanceof Error ? error.message : String(error);
     if (argv.includes('--json') || argv.includes('--json=true')) io.out(JSON.stringify({ ok: false, error: { code: 'E_INTERNAL', message, details: [] } }, null, 2));
-    io.err(`error [E_INTERNAL]: ${message}`);
+    if (!argv.includes('--json') && !argv.includes('--json=true')) io.err(`error [E_INTERNAL]: ${message}`);
     if (error instanceof Error && error.stack && process.env.TASK_GRAPH_DEBUG) {
       io.err(error.stack);
     }

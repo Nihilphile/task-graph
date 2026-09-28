@@ -106,10 +106,6 @@ function buildFixture(workspace: TempWorkspace): E2EFixture {
     '登录能力交付',
     '--goal',
     '交付可用的登录能力',
-    '--condition',
-    '登录可用',
-    '--work-log',
-    '已立项',
   ]);
   cli(workspace, [
     'source',
@@ -299,8 +295,8 @@ test('US-023: the CLI builds a full fixture and validates it', (t) => {
   assert.equal(successor.readiness, 'ready', 'the named completion point is satisfied');
   const blocked = data.tasks.find((task) => task.id === fixture.ids.blocked)!;
   assert.deepEqual(blocked.manualBlockers, ['等待设计稿']);
-  assert.equal(blocked.readiness, 'blocked');
-  assert.equal(data.tasks.find((task) => task.id === fixture.ids.convergence)?.readiness, 'blocked');
+  assert.equal(blocked.readiness, 'ready');
+  assert.equal(data.tasks.find((task) => task.id === fixture.ids.convergence)?.readiness, 'unready');
   const composite = data.tasks.find((task) => task.id === fixture.ids.childComposite)!;
   assert.equal(composite.status, 'done');
   assert.deepEqual(composite.subgraph, {
@@ -434,7 +430,7 @@ test('US-023: the generated viewer runs offline through the file protocol', asyn
     ['G-001 \u00b7 登录能力交付', 'G-004 \u00b7 官网发布'],
   );
   assert.equal(taskNodes(page).length, 5);
-  assert.ok((taskNode(page, ids.blocked).getAttribute('class') ?? '').includes('readiness-blocked'));
+  assert.ok((taskNode(page, ids.blocked).getAttribute('class') ?? '').includes('status-blocked'));
 
   const drill = (taskId: string): void => {
     taskNode(page, taskId).dispatchEvent(

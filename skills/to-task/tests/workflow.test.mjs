@@ -50,7 +50,7 @@ test('Replay keeps IDs and progress; next agent reads current requirements and b
   const first = add();
   const id = first.keys['csv-export.base'];
   const started = run('task', 'start', id, '--role', 'tester', '--session-id', 'isolated-smoke');
-  assert.equal(started.guidance.skill, 'task-take');
+  assert.ok(started.guidance.skill_path);
   assert.match(readFileSync(started.guidance.skill_path, 'utf8'), /name: task-take/);
   write('doc/references/csv-export.md', '# Fixture contract\nCSV columns and escaping rules.');
   run('task', 'reference', 'attach', id, '--path', 'doc/references/csv-export.md', '--summary', 'CSV contract for successor');
@@ -73,7 +73,8 @@ test('Replay keeps IDs and progress; next agent reads current requirements and b
   assert.match(readFileSync(path.join(next.context.project_root, next.context.references[0].read_path), 'utf8'), /CSV columns/);
   const resumed = run('task', 'show', first.keys['csv-export.filtered']);
   assert.equal(resumed.task.claim.sessionId, 'successor-smoke');
-  assert.deepEqual(resumed.guidance, next.guidance);
+  assert.equal(resumed.guidance, undefined);
+  assert.equal(run('task', 'show', first.keys['csv-export.filtered'], '--detail').guidance.skill_path, next.guidance.skill_path);
 });
 
 test('Existing parent gets one child graph; exposed gates unblock external work without completing parent', t => {

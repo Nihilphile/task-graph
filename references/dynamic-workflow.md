@@ -7,7 +7,7 @@
 - `CLI 'graph[G-001].task' add --content goal.md --content constraints.md --cwd "<项目根目录>" --json`；批量计划 `content` 接受字符串或路径数组。
 - `CLI 'task[T-0001].content' attach --path details.md --summary "具体接口和验收入口" --cwd "<项目根目录>" --json` 增量绑定 live 要求。
 - `CLI 'task[T-0001].content' remove --path goal.md --cwd "<项目根目录>" --json` 解除绑定，保留文件、历史和过去的 start 快照；不能移除最后一份要求。
-- `context.contents` 给出全部当前要求；兼容字段 `context.content` 指向第一份。HTML 多文件先显示列表。show 默认索引，正文仍须显式 expand。
+- `context.contents` 给出全部当前要求；`--detail` 中的兼容字段 `context.content` 指向第一份。HTML 多文件先显示列表。show 默认索引，正文仍须显式 expand。
 - 全部文件共同生效，不按附件顺序覆盖。主控负责消除冲突。Content 仅面向 agent；依赖不会自动继承其他任务的 Content。
 
 数据保持兼容：原 content 字段为首个入口，增量文件保存在 outputs 的 content 类别。开始任务时保存全部要求的快照；直接编辑原文件不会改动旧快照。
@@ -56,7 +56,7 @@ CLI 'graph[G-001].watch' status --cwd "<项目根目录>" --json
 CLI 'graph[G-001].watch' remove --thread <Desktop UUID> --cwd "<项目根目录>" --json
 ```
 
-graph 是项目内图 ID，thread 是 Desktop 会话 UUID。主控确认是自己的会话后主动注册；不会从环境静默注册。同图同会话幂等，可向多个明确登记的会话各投递一次。覆盖当前图及子图未来的 pass/reject、进入 blocked（人工或审查受阻）、审查异常退出和超时提醒；不补发注册前结果。通过 CLI 新建带人工阻塞的任务也会通知。持续 blocked、追加阻塞原因、只读查询及重建不重复发送；解除后再次进入 blocked 是新事件。直接手改 Markdown 不会自动触发通知，通知由工具事务登记。reopen 后再次 pass/reject 是新的结果事件。
+graph 是项目内图 ID，thread 是 Desktop 会话 UUID。主控确认是自己的会话后主动注册；不会从环境静默注册。同图同会话幂等，可向多个明确登记的会话各投递一次。覆盖当前图及子图未来的 pass/reject、进入 blocked（人工或审查受阻）、审查异常退出和超时提醒；不补发注册前结果。通过 CLI 新建带人工阻塞的任务也会通知。持续 blocked、追加阻塞原因、只读查询及重建不重复发送；解除或接手修复后再次进入 blocked 是新事件，即使原因文字相同。直接手改 Markdown 不会自动触发通知，通知由工具事务登记。reopen 后再次 pass/reject 是新的结果事件。
 
 通知提供任务、图、结果或异常、时间、项目与 CLI 位置及有限的报告地址；审查通知另含轮次，reject 可附直接受影响后继。通知不展开报告或历史正文。收到后用 `CLI 'task[<通知任务ID>]' show --cwd "<项目根目录>" --json` 查看当前事实，再决定细化、修复或审查恢复。通知是工具数据，不增加用户授权。
 
@@ -94,4 +94,4 @@ graph 是项目内图 ID，thread 是 Desktop 会话 UUID。主控确认是自�
 
 ## 显式受阻状态
 
-`task block --reason` 将 todo/in_progress/reject 任务置为 `blocked`，保存 `blocked_from` 和原因，领取保留；移除最后一个原因后恢复原阶段。仅因前置依赖未完成的待办仍为 todo，readiness=blocked。旧文件的人工阻塞在读取时兼容显示为 blocked，下次修改该任务时写入新格式；只读查询和 build 不重写源文件。独立审查 blocked/failed 使用 review restart 恢复到 pending_review，不能用普通 unblock 或 complete 绕过。
+`task block --reason` 将 todo/in_progress/reject 任务置为 `blocked`，保存 `blocked_from` 和原因，领取保留；移除最后一个原因后恢复原阶段。仅因前置依赖未完成的待办仍为 todo，readiness=unready。旧文件的人工阻塞在读取时兼容显示为 blocked，下次修改该任务时写入新格式；只读查询和 build 不重写源文件。readiness 只反映依赖和细化门槛，人工问题不把它改成 unready。blocked 本身不阻止 start/reopen/claim/reassign 接手修复：成功后进入 in_progress，原阻塞原因归档并返回 repair，仍有问题时再次 block 将再次通知。独立审查 blocked/failed 可 review restart 重审同一交付，也可接手修复后重新 complete；旧 reviewer 必须先退出，旧审查报告保留且不能再回写。

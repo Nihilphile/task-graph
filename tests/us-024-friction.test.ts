@@ -14,7 +14,7 @@ test('work log and structured outputs are visible through task show and the gene
   const added = run('task', 'output', 'add', 'T-0001', '--path', 'docs/api.md', '--note', '接口契约');
   assert.equal(added.code, 0, added.stderr);
 
-  const shown = run('task', 'show', 'T-0001', '--expand', 'log', '--json');
+  const shown = run('task', 'show', 'T-0001', '--detail', '--expand', 'log', '--json');
   assert.equal(shown.code, 0, shown.stderr);
   const task = JSON.parse(shown.stdout).task as {
     documents: { logs: { body: string }[] };
@@ -28,11 +28,11 @@ test('work log and structured outputs are visible through task show and the gene
 
   const removed = run('task', 'output', 'remove', 'T-0001', '--path', 'docs/api.md');
   assert.equal(removed.code, 0, removed.stderr);
-  const after = JSON.parse(run('task', 'show', 'T-0001', '--json').stdout).task;
+  const after = JSON.parse(run('task', 'show', 'T-0001', '--detail', '--json').stdout).task;
   assert.deepEqual(after.outputs, []);
   assert.equal(run('task', 'output', 'add', 'T-0001', '--path', '../outside.md').code, 1);
   assert.equal(run('task', 'output', 'add', 'T-0001', '--path', 'C:outside.md').code, 1);
-  assert.deepEqual(JSON.parse(run('task', 'show', 'T-0001', '--json').stdout).task.outputs, []);
+  assert.deepEqual(JSON.parse(run('task', 'show', 'T-0001', '--detail', '--json').stdout).task.outputs, []);
 });
 
 test('task list computes current blockers from source without graph.json', (t) => {
@@ -43,7 +43,7 @@ test('task list computes current blockers from source without graph.json', (t) =
   assert.equal(add.code, 0, add.stderr);
   workspace.write('.task-graph/generated/graph.json', '{"stale":true}');
 
-  const listed = run('task', 'list', '--readiness', 'blocked', '--json');
+  const listed = run('task', 'list', '--readiness', 'unready', '--json');
   assert.equal(listed.code, 0, listed.stderr);
   const tasks = JSON.parse(listed.stdout).tasks as { id: string; blockedBy: unknown[] }[];
   assert.deepEqual(tasks.map((task) => task.id), ['T-0002']);

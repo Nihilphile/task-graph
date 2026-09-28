@@ -347,7 +347,7 @@ test('US-010: the claim commands work through the CLI', () => {
     { cwd: workspace.root },
   );
   assert.equal(claim.code, 0, claim.stderr);
-  assert.match(claim.stdout, /Claimed T-0001 for implementer \/ thread-1 \(execution run-7\)/);
+  assert.match(claim.stdout, /id: T-0001[\s\S]*role: implementer[\s\S]*sessionId: thread-1/);
 
   const duplicate = runCliProcess(
     ['task', 'claim', 'T-0001', '--role', 'implementer', '--session-id', 'thread-2'],
@@ -378,7 +378,7 @@ test('US-010: the claim commands work through the CLI', () => {
     cwd: workspace.root,
   });
   assert.equal(release.code, 0, release.stderr);
-  assert.match(release.stdout, /Released T-0001/);
+  assert.match(release.stdout, /id: T-0001[\s\S]*claim: null/);
 
   const releaseAgain = runCliProcess(['task', 'release', 'T-0001'], { cwd: workspace.root });
   assert.equal(releaseAgain.code, EXIT_FAILURE);
