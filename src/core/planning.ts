@@ -11,6 +11,7 @@ import { resolveTargetGraph, parseDependencySpecs, type AddTaskOptions } from '.
 import { timestampOf } from './mutate.js';
 import { runProjectTransaction } from './transaction.js';
 import { assertRepositoryValid } from './validate.js';
+import { recordWatchResult } from './watch.js';
 
 export interface PlannedTask extends AddTaskOptions {
   readonly completionRequires?: readonly string[];
@@ -100,6 +101,7 @@ export function addPlannedTasks(root: string, inputs: readonly PlannedTask[]): {
         history: [historyEntry('created', timestampOf(input.now), input.actor ?? null, { graph })],
       };
       for (const file of input.contentFiles ?? []) created = withDocument(root, created, transaction, { ...input, id, path: file, kind: 'content' });
+      if (created.status === 'blocked') created = { ...created, history: [...created.history, historyEntry('blocked', timestampOf(input.now), input.actor ?? null, { from: 'todo', to: 'blocked', reason: created.manualBlockers.join('; ') })] };
       tasks.set(id, created);
       dirty.add(id);
       placing.delete(id);
@@ -117,6 +119,10 @@ export function addPlannedTasks(root: string, inputs: readonly PlannedTask[]): {
     }
     for (const id of dirty) transaction.write(`.task-graph/tasks/${id}.md`, serializeTaskDocument(tasks.get(id)!));
     if (manifest.graphs.length !== repository.manifest.graphs.length) transaction.write('.task-graph/project.yaml', serializeProjectManifest(manifest));
+    for (const id of pending.keys()) {
+      const task = tasks.get(id)!;
+      if (task.status === 'blocked') recordWatchResult(root, task, transaction, 'blocked', { manifest, tasks: [...tasks.values()] });
+    }
   }, { validate: () => assertRepositoryValid(root) });
   buildProject(root);
   const repository = loadTaskRepository(root);

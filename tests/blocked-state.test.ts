@@ -12,7 +12,8 @@ import { configureReview, finishReview, restartReview, updateRun } from '../src/
 import { readReviewState, currentReview } from '../src/core/review-state.js';
 import { errorBookEntries } from '../src/core/error-book.js';
 import { openViewer, taskNode } from './helpers/viewer-dom.js';
-import { readWatchLedger, watchGraph } from '../src/core/watch.js';
+import { readWatchLedger, watchGraph, deliverWatch } from '../src/core/watch.js';
+import { addPlannedTasks } from '../src/core/planning.js';
 import { addGraph } from '../src/core/graphs.js';
 import { setCompletionRequires } from '../src/core/composites.js';
 import { unlinkTask } from '../src/core/deps.js';
@@ -78,10 +79,49 @@ test('Unblocking a rejected task preserves its verdict without another watch eve
   });
   w.write('error.md','# Failure');startTask(w.root,{id:'T-0001'});
   completeTask(w.root,{id:'T-0001',result:'reject',errorReport:'error.md'});
-  const before=readWatchLedger(w.root)!.events;
   addManualBlocker(w.root,{id:'T-0001',reason:'等待裁定'});
+  const before=readWatchLedger(w.root)!.events;
+  assert.deepEqual(before.map(e=>e.result),['reject','blocked']);
   assert.equal(removeManualBlocker(w.root,{id:'T-0001',reason:'等待裁定'}).status,'reject');
   assert.deepEqual(readWatchLedger(w.root)!.events,before);
+});
+
+test('Manual blocked notifications reach the subscribed parent once per blocked episode', async t => {
+  const w=useTempWorkspace(t,'manual-block-watch');initializeProject(w.root,{name:'Watch',task:'Parent'});
+  const child=addGraph(w.root,{title:'Child',parentTask:'T-0001'}).graph;
+  const task=addTask(w.root,{graph:child.id,summary:'Work'});
+  const earlier=addTask(w.root,{graph:child.id,summary:'Earlier',manualBlockers:['Already waiting']});
+  const sent:string[]=[];
+  const adapter={inspect:async()=>({executable:'fixture',version:'fixture',home:'fixture'}),submit:async (_binding:unknown,_thread:string,message:string)=>{sent.push(message);return {state:'accepted' as const,receipt:'fixture'};}};
+  await watchGraph(w.root,'G-001','01a0d067-d9fc-7cd1-b278-4b068b7a7169',adapter);
+  assert.equal(readWatchLedger(w.root)!.events.length,0);
+  startTask(w.root,{id:task.id});addManualBlocker(w.root,{id:task.id,reason:'等待用户选择'});
+  addManualBlocker(w.root,{id:task.id,reason:'等待设备'});buildProject(w.root);
+  assert.equal(readWatchLedger(w.root)!.events.length,1);
+  await deliverWatch(w.root,adapter,{singlePass:true});await deliverWatch(w.root,adapter,{singlePass:true});
+  assert.equal(sent.length,1);assert.equal(readWatchLedger(w.root)!.events[0]!.state,'accepted');
+  const data=JSON.parse(sent[0]!.split('\n')[1]!);
+  assert.equal(data.result,'blocked');assert.equal(data.task,task.id);assert.equal(data.watched_graph,'G-001');
+  assert.equal(data.reason,'等待用户选择');assert.match(data.recovery,/unblock/);assert.doesNotMatch(data.recovery,/review restart/);
+  removeManualBlocker(w.root,{id:task.id,reason:'等待用户选择'});removeManualBlocker(w.root,{id:task.id,reason:'等待设备'});
+  addManualBlocker(w.root,{id:task.id,reason:'新障碍'});
+  await deliverWatch(w.root,adapter,{singlePass:true});assert.equal(sent.length,2);
+  assert.ok(readWatchLedger(w.root)!.events.every(e=>e.task!==earlier.id));
+});
+
+test('Batch creation of blocked tasks notifies once each, including newly created subgraphs', async t => {
+  const w=useTempWorkspace(t,'created-block-watch');initializeProject(w.root,{name:'Watch',task:'Parent'});
+  const sent:string[]=[];
+  const adapter={inspect:async()=>({executable:'fixture',version:'fixture',home:'fixture'}),submit:async (_binding:unknown,_thread:string,message:string)=>{sent.push(message);return {state:'accepted' as const,receipt:'fixture'};}};
+  await watchGraph(w.root,'G-001','01a0d067-d9fc-7cd1-b278-4b068b7a7169',adapter);
+  w.write('content.md','# Requirements');
+  const plan=[{key:'first',parentTask:'T-0001',summary:'First',contentFiles:['content.md'],manualBlockers:['Need decision']},{key:'second',parentTask:'T-0001',summary:'Second',manualBlockers:['Need device']}];
+  addPlannedTasks(w.root,plan);addPlannedTasks(w.root,plan);
+  assert.equal(readWatchLedger(w.root)!.events.length,2);
+  await deliverWatch(w.root,adapter,{singlePass:true});await deliverWatch(w.root,adapter,{singlePass:true});assert.equal(sent.length,2);
+  assert.ok(readWatchLedger(w.root)!.events.every(e=>e.state==='accepted'&&e.result==='blocked'));
+  assert.throws(()=>addPlannedTasks(w.root,[{summary:'Invalid',graph:'G-999',manualBlockers:['Invalid']}]),/graph/i);
+  assert.equal(readWatchLedger(w.root)!.events.length,2);
 });
 
 test('Review freezes dependency and composite completion contracts, including blocked rounds', t => {

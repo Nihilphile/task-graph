@@ -197,7 +197,7 @@ CLI . build --cwd "<项目根目录>" --json
 
 ### 可选：Desktop 结果通知
 
-主控主动执行 `'graph[<图ID>].watch' add --thread <自己的Desktop UUID>` 后，该图及子图后续 pass/reject，以及独立审查的 blocked、异常退出和超时提醒会进入通知队列；没有注册就不发送。`'graph[<图ID>].watch' status` 查看结果，`'graph[<图ID>].watch' remove --thread <UUID>` 停止未来发送。所有命令仍需 --cwd，重复注册幂等，不回放过去结果。
+主控主动执行 `'graph[<图ID>].watch' add --thread <自己的Desktop UUID>` 后，该图及子图后续 pass/reject、进入 blocked（人工或审查受阻）、审查异常退出和超时提醒会进入通知队列；没有注册就不发送。`'graph[<图ID>].watch' status` 查看结果，`'graph[<图ID>].watch' remove --thread <UUID>` 停止未来发送。所有命令仍需 --cwd，重复注册幂等，不回放过去结果。
 
 通知进入后续 turn；忙碌主控需要结束当前 turn 才能消费。accepted 只表示 Desktop queue 接收；uncertain 不盲目自动重发。通知不会自动 refine、派工或扩大授权。投递失败不撤销已保存的任务结果；恢复及当前版本适用范围见动态工作流参考。
 

@@ -7,7 +7,7 @@ export function graphWatchCommands(): CommandSpec[] {
   return [{
     name: 'graph watch', summary: 'Explicitly subscribe a Desktop thread to future graph/subgraph results',
     usage: 'task-graph graph watch G-NNN --thread <UUID> | --status | --flush | --retry <event-id> [--allow-duplicate] [--cwd <dir>] [--json]',
-    details: ['No implicit environment registration. Repeated active graph/thread registration is idempotent; no historical result backfill.', 'Desktop queue starts a subsequent turn; acceptance is not consumption. Unknown delivery outcomes are not automatically retried.', '--status is read-only. --flush resumes the project delivery worker. --retry targets a paused/uncertain event in this graph subscription.'],
+    details: ['No implicit environment registration. Repeated active graph/thread registration is idempotent; no historical result backfill. Future pass/reject and entry into blocked (manual or review) notify; remaining blocked does not repeat.', 'Desktop queue starts a subsequent turn; acceptance is not consumption. Unknown delivery outcomes are not automatically retried.', '--status is read-only. --flush resumes the project delivery worker. --retry targets a paused/uncertain event in this graph subscription.'],
     async run(ctx, args) {
       const root = resolveCwd(ctx, args), graph = args.positionals[0];
       if (!graph) throw usageError('Pass graph ID');

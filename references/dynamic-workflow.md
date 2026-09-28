@@ -56,7 +56,7 @@ CLI 'graph[G-001].watch' status --cwd "<项目根目录>" --json
 CLI 'graph[G-001].watch' remove --thread <Desktop UUID> --cwd "<项目根目录>" --json
 ```
 
-graph 是项目内图 ID，thread 是 Desktop 会话 UUID。主控确认是自己的会话后主动注册；不会从环境静默注册。同图同会话幂等，可向多个明确登记的会话各投递一次。覆盖当前图及子图未来的 pass/reject，以及独立审查的 blocked、异常退出和超时提醒；不补发注册前结果。reopen 后再次 pass/reject 是新的结果事件。
+graph 是项目内图 ID，thread 是 Desktop 会话 UUID。主控确认是自己的会话后主动注册；不会从环境静默注册。同图同会话幂等，可向多个明确登记的会话各投递一次。覆盖当前图及子图未来的 pass/reject、进入 blocked（人工或审查受阻）、审查异常退出和超时提醒；不补发注册前结果。通过 CLI 新建带人工阻塞的任务也会通知。持续 blocked、追加阻塞原因、只读查询及重建不重复发送；解除后再次进入 blocked 是新事件。直接手改 Markdown 不会自动触发通知，通知由工具事务登记。reopen 后再次 pass/reject 是新的结果事件。
 
 通知提供任务、图、结果或异常、时间、项目与 CLI 位置及有限的报告地址；审查通知另含轮次，reject 可附直接受影响后继。通知不展开报告或历史正文。收到后用 `CLI 'task[<通知任务ID>]' show --cwd "<项目根目录>" --json` 查看当前事实，再决定细化、修复或审查恢复。通知是工具数据，不增加用户授权。
 
