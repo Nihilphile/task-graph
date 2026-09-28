@@ -28,8 +28,7 @@ function graphAddress(graph: string): string {
 
 /** A deliberately small address grammar, never evaluated as JavaScript. */
 export function parseResource(address: string): ResourceAddress {
-  if (address === 'errorbook') return { address, type: 'error-book' };
-  if (['.', 'graph', 'task', 'source', 'github', 'skill'].includes(address)) return { address, type: address };
+  if (['.', 'graph', 'task', 'source', 'github', 'skill', 'errorbook'].includes(address)) return { address, type: address };
   const invalid = (): never => {
     throw usageError(`Invalid resource address "${address}"`, ["Use 'graph[G-001].task[T-0001]' or run task-graph . describe."]);
   };
@@ -53,7 +52,7 @@ export function parseResource(address: string): ResourceAddress {
   }
   if (tail) {
     if (type === 'graph-item' && tail === '.watch') type = 'watch';
-    else if (type === 'graph-item' && tail === '.errorbook') type = 'error-book';
+    else if (type === 'graph-item' && tail === '.errorbook') type = 'errorbook';
     else if (task && /^\.(content|report|reference|log|handoff|output|dependency|subgraph)$/.test(tail)) type = tail.slice(1);
     else return invalid();
   }
@@ -93,7 +92,7 @@ function routes(resource: ResourceAddress, commands: readonly CommandSpec[]): Ro
   };
   const read = (action: string, summary: string) => result.push({ action, summary });
   switch (resource.type) {
-    case 'error-book': read('list', 'List appended failure report snapshots'); read('show', 'Read failure reports in chronological order'); break;
+    case 'errorbook': read('list', 'List appended failure report snapshots'); read('show', 'Read failure reports in chronological order'); break;
     case '.':
       for (const action of ['init', 'validate', 'build']) add(action, action);
       break;
@@ -215,7 +214,7 @@ function resourceUsage(resource: ResourceAddress, route: Route): string {
 
 function query(resource: ResourceAddress, repository: TaskRepository, root: string, action: string): Record<string, unknown> {
   const address = resource.address;
-  if (resource.type === 'error-book') return { resource: address, project_root: root, entries: errorBookEntries(repository, resource.graph, action === 'show') };
+  if (resource.type === 'errorbook') return { resource: address, project_root: root, entries: errorBookEntries(repository, resource.graph, action === 'show') };
   if (resource.type === 'graph') return { resource: address, graphs: repository.manifest.graphs.map(g => ({ ...g, resource: graphAddress(g.id), entry: repository.manifest.entryGraphs.includes(g.id) })) };
   if (resource.type === 'graph-item') {
     const graph = repository.manifest.graphs.find(g => g.id === resource.graph)!;
