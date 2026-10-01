@@ -5,7 +5,7 @@ import { main } from '../src/cli/main.js';
 import { initializeProject } from '../src/core/init.js';
 import { addGraph } from '../src/core/graphs.js';
 import { readTaskDocument } from '../src/core/task.js';
-import { taskDocuments } from '../src/core/documents.js';
+import { attachDocument, taskDocuments } from '../src/core/documents.js';
 import { planGitHub } from '../src/core/github-plan.js';
 import { useTempWorkspace } from './helpers/temp.js';
 import { openViewer, click, taskNode } from './helpers/viewer-dom.js';
@@ -19,18 +19,22 @@ function setup(t: TestContext) {
     return { code, payload: JSON.parse(out.join('\n')), error: err.join('\n') };
   };
   const run = async (...args: string[]) => { const result = await invoke(...args); assert.equal(result.code, 0, result.error); return result.payload; };
-  return { w, run, invoke };
+  return { w, run, invoke, legacyReference: (id: string, ...args: string[]) => {
+    const option = (key: string) => args.includes(key) ? args[args.indexOf(key) + 1] : undefined;
+    attachDocument(w.root, { id, kind: 'reference', path: option('--path')!, summary: option('--summary'), title: option('--title'), snapshot: args.includes('--snapshot') });
+  } };
 }
 
-test('Attachment summary round-trips for all kinds; reference supports live code and frozen versions', async t => {
-  const { w, run } = setup(t);
+test('Legacy attachment summary round-trips for all kinds; reference supports live code and frozen versions', async t => {
+  const { w, run, legacyReference } = setup(t);
   w.write('guide.md', '# Guide\nFrozen original');
   for (const kind of ['report', 'log', 'handoff', 'reference']) {
-    await run('task', kind, 'attach', 'T-0001', '--path', 'guide.md', '--summary', kind + ' summary');
+    if (kind === 'reference') legacyReference('T-0001', '--path', 'guide.md', '--summary', kind + ' summary');
+    else await run('task', kind, 'attach', 'T-0001', '--path', 'guide.md', '--summary', kind + ' summary');
   }
   w.write('types.ts', 'export type SavedReport = { path: string };');
-  await run('task', 'reference', 'attach', 'T-0001', '--path', 'types.ts', '--summary', 'Producer contract');
-  await run('task', 'reference', 'attach', 'T-0001', '--path', 'types.ts', '--snapshot', '--title', 'Frozen contract');
+  legacyReference('T-0001', '--path', 'types.ts', '--summary', 'Producer contract');
+  legacyReference('T-0001', '--path', 'types.ts', '--snapshot', '--title', 'Frozen contract');
   w.write('types.ts', 'export type SavedReport = { readPath: string };');
   const task = readTaskDocument(w.root, 'T-0001');
   for (const kind of ['report', 'log', 'handoff', 'reference']) assert.equal(task.outputs.find(o => o.kind === kind)?.summary, kind + ' summary');
@@ -42,7 +46,7 @@ test('Attachment summary round-trips for all kinds; reference supports live code
   assert.ok(readTaskDocument(w.root, 'T-0001').outputs.some(o => o.kind === 'handoff' && o.summary === 'Resume after review'));
 });
 
-test('References reject missing/outside files and invalid snapshot mode without mutation', async t => {
+test('File-style reference writes and invalid report snapshot mode are rejected without mutation', async t => {
   const { w, invoke } = setup(t);
   const before = w.read('.task-graph/tasks/T-0001.md');
   for (const file of ['../outside.md', 'missing.md']) {
@@ -55,9 +59,9 @@ test('References reject missing/outside files and invalid snapshot mode without 
 });
 
 test('Reference label opens path/summary list and escaped code; GitHub publishes index only', async t => {
-  const { w, run } = setup(t);
+  const { w, run, legacyReference } = setup(t);
   w.write('guide.ts', 'const code = "<script>window.injected = true</script>";');
-  await run('task', 'reference', 'attach', 'T-0001', '--path', 'guide.ts', '--summary', '<img src=x onerror=alert(1)> contract');
+  legacyReference('T-0001', '--path', 'guide.ts', '--summary', '<img src=x onerror=alert(1)> contract');
   const page = await openViewer(w.paths.indexHtmlFile); t.after(() => page.close());
   click(page, taskNode(page, 'T-0001'));
   click(page, page.document.querySelector('#details-body [data-panel="references"]')!);
@@ -71,7 +75,7 @@ test('Reference label opens path/summary list and escaped code; GitHub publishes
   // Enable configuration locally through core APIs; never use a real GitHub transport.
   const graph = addGraph(w.root, { title: 'Published', entry: true, githubRepo: 'example/project' }).graph;
   const task = await run('task', 'add', '--graph', graph.id, '--summary', 'Remote index');
-  await run('task', 'reference', 'attach', task.task.id, '--path', 'guide.ts', '--summary', 'Code contract');
+  legacyReference(task.task.id, '--path', 'guide.ts', '--summary', 'Code contract');
   const plan = planGitHub(w.root);
   const entity = plan.entities.find(e => e.key === task.task.id)!;
   assert.match(entity.body, /guide.ts[\s\S]*Code contract/);
@@ -80,14 +84,14 @@ test('Reference label opens path/summary list and escaped code; GitHub publishes
 });
 
 test('Show/start share address manifests; direct references preserve provenance and show is read-only', async t => {
-  const { w, run } = setup(t);
+  const { w, run, legacyReference } = setup(t);
   w.write('contract.ts', 'SECRET_BODY_NOT_IN_MANIFEST'); w.write('brief.md', '# Consumer requirement');
-  await run('task', 'reference', 'attach', 'T-0001', '--path', 'contract.ts', '--summary', 'Producer interface');
+  legacyReference('T-0001', '--path', 'contract.ts', '--summary', 'Producer interface');
   const second = (await run('task', 'add', '--summary', 'Second producer')).task.id;
-  await run('task', 'reference', 'attach', second, '--path', 'contract.ts', '--snapshot', '--summary', 'Pinned contract');
+  legacyReference(second, '--path', 'contract.ts', '--snapshot', '--summary', 'Pinned contract');
   const consumer = (await run('task', 'add', '--summary', 'Consumer', '--content', 'brief.md', '--depends-on', 'T-0001', '--depends-on', second)).task.id;
   w.write('local.md', 'Own reference');
-  await run('task', 'reference', 'attach', consumer, '--path', 'local.md');
+  legacyReference(consumer, '--path', 'local.md');
   const before = new Map(w.listFiles().map(file => [file, w.readBuffer(file)]));
   const context = (await run('task', 'show', consumer)).context;
   assert.equal(context.project_root, w.root);
@@ -110,13 +114,13 @@ test('Show/start share address manifests; direct references preserve provenance 
 });
 
 test('Partial gates include only referenced members, deduplicate overlapping gates, and do not walk ancestors', async t => {
-  const { w, run } = setup(t);
+  const { w, run, legacyReference } = setup(t);
   for (const name of ['parent', 'selected', 'other']) w.write(`${name}.md`, name);
-  await run('task', 'reference', 'attach', 'T-0001', '--path', 'parent.md');
+  legacyReference('T-0001', '--path', 'parent.md');
   const selected = (await run('task', 'add', '--parent-task', 'T-0001', '--summary', 'Selected')).task.id;
   const other = (await run('task', 'add', '--parent-task', 'T-0001', '--summary', 'Other')).task.id;
-  await run('task', 'reference', 'attach', selected, '--path', 'selected.md');
-  await run('task', 'reference', 'attach', other, '--path', 'other.md');
+  legacyReference(selected, '--path', 'selected.md');
+  legacyReference(other, '--path', 'other.md');
   await run('task', 'expose-gate', 'T-0001', '--name', 'api', '--requires', selected);
   await run('task', 'expose-gate', 'T-0001', '--name', 'schema', '--requires', selected);
   const consumer = (await run('task', 'add', '--graph', 'G-001', '--summary', 'Consumer', '--depends-on', 'T-0001:api', '--depends-on', 'T-0001:schema')).task.id;
@@ -126,10 +130,10 @@ test('Partial gates include only referenced members, deduplicate overlapping gat
 });
 
 test('Reference index refreshes bindings and distinguishes missing live files from readable snapshots', async t => {
-  const { w, run } = setup(t);
+  const { w, run, legacyReference } = setup(t);
   w.write('guide.md', 'Version one');
-  await run('task', 'reference', 'attach', 'T-0001', '--path', 'guide.md');
-  await run('task', 'reference', 'attach', 'T-0001', '--path', 'guide.md', '--snapshot');
+  legacyReference('T-0001', '--path', 'guide.md');
+  legacyReference('T-0001', '--path', 'guide.md', '--snapshot');
   const consumer = (await run('task', 'add', '--summary', 'Consumer', '--depends-on', 'T-0001')).task.id;
   unlinkSync(w.file('guide.md'));
   const entries = (await run('task', 'show', consumer)).context.references;
@@ -140,11 +144,11 @@ test('Reference index refreshes bindings and distinguishes missing live files fr
 });
 
 test('Dependency reference sidebar groups source tasks and opens upstream content', async t => {
-  const { w, run } = setup(t);
+  const { w, run, legacyReference } = setup(t);
   w.write('upstream.md', '# Upstream contract\nUse this behavior.'); w.write('own.md', 'Own notes');
-  await run('task', 'reference', 'attach', 'T-0001', '--path', 'upstream.md', '--summary', 'Upstream usage');
+  legacyReference('T-0001', '--path', 'upstream.md', '--summary', 'Upstream usage');
   const consumer = (await run('task', 'add', '--summary', 'Consumer', '--depends-on', 'T-0001')).task.id;
-  await run('task', 'reference', 'attach', consumer, '--path', 'own.md', '--summary', 'Local usage');
+  legacyReference(consumer, '--path', 'own.md', '--summary', 'Local usage');
   const page = await openViewer(w.paths.indexHtmlFile); t.after(() => page.close());
   click(page, taskNode(page, consumer)); click(page, page.document.querySelector('#details-body [data-panel="references"]')!);
   const text = page.document.querySelector('#details-body')!.textContent!;

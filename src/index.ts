@@ -39,3 +39,6 @@ export * from './core/skill.js';
 export * from './core/refinement.js';
 export * from './core/watch.js';
 export * from './core/desktop-notify.js';
+
+export * from './core/knowledge-store.js';
+export * from './core/knowledge.js';

@@ -92,6 +92,8 @@ export function addPlannedTasks(root: string, inputs: readonly PlannedTask[]): {
       const document = createTaskDocument({ id, graph, title, goal: input.goal, completionConditions: input.completionConditions, workLog: input.workLog });
       const dependencies = [...(input.dependsOn ?? []), ...parseDependencySpecs(input.dependsOnSpecs ?? [])].map((dep) => ({ ...dep, task: resolveId(dep.task) }));
       let created: TaskDocument = { ...document,
+        ...(input.contracts?.length ? { contracts: [...new Set(input.contracts)] } : {}),
+        ...(input.references?.length ? { references: [...new Set(input.references)] } : {}),
         ...(input.planning ? { planning: input.planning } : {}),
         ...(input.kind ? { kind: input.kind } : {}),
         ...(compact ? { summary: title, body: input.goal !== undefined || input.completionConditions?.length || input.workLog?.length ? document.body : `# ${title}\n` } : {}),
@@ -147,7 +149,7 @@ export function readTaskPlan(file: string): PlannedTask[] {
   const defaultGraph = optionalString(object['graph'], 'plan.graph');
   return object['tasks'].map((raw, index) => {
     const task = record(raw, `tasks[${index}]`);
-    const allowed = ['key', 'summary', 'title', 'content', 'planning', 'kind', 'graph', 'parent_task', 'depends_on', 'manual_blockers', 'derived_from', 'completion_requires', 'exposes'];
+    const allowed = ['key', 'summary', 'title', 'content', 'planning', 'kind', 'graph', 'parent_task', 'depends_on', 'manual_blockers', 'derived_from', 'completion_requires', 'exposes', 'contracts', 'references'];
     for (const field of Object.keys(task)) if (!allowed.includes(field)) throw new TaskGraphError('E_PLAN', `Unknown tasks[${index}] field "${field}"`);
     const parentTask = optionalString(task['parent_task'], 'parent_task');
     const dependencies = task['depends_on'] ?? [];
@@ -169,6 +171,8 @@ export function readTaskPlan(file: string): PlannedTask[] {
       kind: choice(task['kind'], ['work', 'acceptance', 'decision'] as const, 'kind'),
       ...planContents(task['content']), graph: optionalString(task['graph'], 'graph') ?? (parentTask ? undefined : defaultGraph), parentTask, dependsOn,
       manualBlockers: strings(task['manual_blockers'] ?? [], 'manual_blockers'), derivedFrom: strings(task['derived_from'] ?? [], 'derived_from'),
+      ...(task['contracts'] === undefined ? {} : { contracts: strings(task['contracts'], 'contracts') }),
+      ...(task['references'] === undefined ? {} : { references: strings(task['references'], 'references') }),
       ...(task['completion_requires'] === undefined ? {} : { completionRequires: strings(task['completion_requires'], 'completion_requires') }),
       ...(exposed === undefined ? {} : { exposes: Object.fromEntries(Object.entries(exposed).map(([name, value]) => [name, strings(Array.isArray(value) ? value : record(value, name)['requires'], `exposes.${name}.requires`)])) }),
     };

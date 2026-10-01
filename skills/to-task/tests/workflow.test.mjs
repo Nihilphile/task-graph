@@ -52,8 +52,8 @@ test('Replay keeps IDs and progress; next agent reads current requirements and b
   const started = run('task', 'start', id, '--role', 'tester', '--session-id', 'isolated-smoke');
   assert.ok(started.guidance.skill_path);
   assert.match(readFileSync(started.guidance.skill_path, 'utf8'), /name: task-take/);
-  write('doc/references/csv-export.md', '# Fixture contract\nCSV columns and escaping rules.');
-  run('task', 'reference', 'attach', id, '--path', 'doc/references/csv-export.md', '--summary', 'CSV contract for successor');
+  write('src/export.ts', 'export function exportCsv() {}');
+  run('task', 'reference', 'add', id, '--path', 'src/export.ts', '--line', '1', '--symbol', 'exportCsv', '--summary', 'CSV export entry');
   write('doc/reports/csv-export/base.md', '# Test fixture delivery\nA simulated result, not a real feature implementation.');
   run('task', 'complete', id, '--report', 'doc/reports/csv-export/base.md', '--log', 'Fixture complete');
   const again = add();
@@ -68,9 +68,9 @@ test('Replay keeps IDs and progress; next agent reads current requirements and b
   assert.ok(handoff.includes('Test fixture delivery'));
   const next = run('task', 'start', first.keys['csv-export.filtered'], '--role', 'tester', '--session-id', 'successor-smoke');
   assert.deepEqual(next.guidance, started.guidance);
-  assert.equal(next.context.references[0].source_task, id);
-  assert.equal(next.context.references[0].summary, 'CSV contract for successor');
-  assert.match(readFileSync(path.join(next.context.project_root, next.context.references[0].read_path), 'utf8'), /CSV columns/);
+  assert.equal(next.context.code_references[0].symbol, 'exportCsv');
+  assert.equal(next.context.code_references[0].summary, 'CSV export entry');
+  assert.match(readFileSync(path.join(next.context.project_root, next.context.code_references[0].path), 'utf8'), /export function/);
   const resumed = run('task', 'show', first.keys['csv-export.filtered']);
   assert.equal(resumed.task.claim.sessionId, 'successor-smoke');
   assert.equal(resumed.guidance, undefined);
@@ -92,7 +92,7 @@ test('Existing parent gets one child graph; exposed gates unblock external work 
   assert.equal(new Set(added.tasks.map(task => task.graph)).size, 1);
   run('task', 'expose-gate', parent.id, '--name', 'base-ready', '--requires', added.keys['nested.base']);
   const consumer = run('task', 'add', '--graph', parent.graph, '--summary', 'External check', '--depends-on', `${parent.id}:base-ready`).task;
-  assert.equal(run('task', 'show', consumer.id).task.readiness, 'blocked');
+  assert.equal(run('task', 'show', consumer.id).task.readiness, 'unready');
   run('task', 'start', added.keys['nested.base']);
   run('task', 'complete', added.keys['nested.base']);
   assert.equal(run('task', 'show', parent.id).task.status, 'todo');

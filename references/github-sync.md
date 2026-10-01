@@ -29,7 +29,7 @@ CLI graph add --title "版本交付" --entry --gh --repo owner/repo --cwd "<项�
 | `task[T-0001].log add` | 逐条评论；启用此版本后记录的日志保留原文用于补发 |
 | `task[T-0001].report attach`、`task[T-0001].handoff attach`、自动交接 | 按快照发布评论；同一文件不同版本分别保留 |
 | `task[T-0001].log attach` | 内容变化后发布新版本评论 |
-| `task[T-0001].reference attach` | issue 正文列出文件索引、读取方式和可选摘要；参考文件正文不自动发评论 |
+| `task[T-0001].reference add/attach` | issue 正文列出代码条目；源码不自动发评论 |
 | complete / cancel / reopen | 完成或取消时关闭 issue，重新打开时恢复 open |
 
 入口图至少有一个直属任务，且全部 done/cancelled 后自动关闭；有任务恢复执行或新增待办时重新打开。复合父任务仍须显式 complete。包含取消任务的入口图使用 not_planned 关闭原因。人工阻塞和 ready/in_progress 见正文；Agent 的会话 ID 不映射为 GitHub assignee。
@@ -40,7 +40,7 @@ CLI graph add --title "版本交付" --entry --gh --repo owner/repo --cwd "<项�
 
 Markdown/text、JSON/YAML/CSV、文本日志按原文发布。较长报告分成多条评论，较长任务要求放在注明版本的评论里。报告和交接读取冻结的快照，修改原始文件不改动已交付版本。
 
-上述正文评论规则适用于 report/log/handoff。reference 用于后继定位本地资料，只同步索引和 summary；引用代码文件不会因登记 reference 而自动作为评论发布。附件 summary 会显示在新发布的对应报告/日志/交接评论中。
+上述正文评论规则适用于 report/log/handoff。reference 只同步入口和短说明；contract 同步 ID、名称和本地权威路径，不创建远程任务节点或自动发布契约正文。附件 summary 会显示在新发布的对应报告/日志/交接评论中。
 
 PDF、图片等二进制附件发布文件名和 SHA-256 元数据；文件仍保存在本地。不会自动上传附件、commit 或 push。Markdown 内本地图片及相对链接也不会自动上传到 GitHub；GitHub 阅读需另有可访问的链接。离线 HTML 保留现有文件读取能力。
 

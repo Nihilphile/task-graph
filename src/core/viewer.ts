@@ -1,5 +1,13 @@
 import { VIEWER_JS } from './viewer-client.js';
+import { VIEWER_LAYOUT_JS } from './viewer-layout.js';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import type { GraphProjection } from './projection.js';
+
+// Keep the vendor license and bundle inline so file:// viewers need no network.
+const require = createRequire(import.meta.url);
+const ELK_JS = readFileSync(require.resolve('elkjs/lib/elk.bundled.js'), 'utf8')
+  .replace(/<\/script/gi, '<\\/script');
 
 /** Marker used by tests to distinguish the embedded projection from any other JSON. */
 export const GRAPH_DATA_ELEMENT_ID = 'graph-data';
@@ -32,6 +40,9 @@ export function renderIndexHtml(projection: GraphProjection): string {
     '<strong id="project-name"></strong>',
     '<nav id="breadcrumbs" aria-label="graph breadcrumbs"></nav>',
     '<div id="viewport-controls">',
+    '<label>排版 <select id="layout-direction" aria-label="排版方向"><option value="RIGHT">横向</option><option value="DOWN">纵向</option></select></label>',
+    '<label><input id="show-contracts" type="checkbox" checked>契约引用</label>',
+    '<span id="layout-status" role="status"></span>',
     '<button type="button" data-view="zoom-out" title="Zoom out">&minus;</button>',
     '<button type="button" data-view="zoom-in" title="Zoom in">+</button>',
     '<button type="button" data-view="fit" title="Fit to view">Fit</button>',
@@ -54,7 +65,9 @@ export function renderIndexHtml(projection: GraphProjection): string {
     '<ul id="legend" class="legend">',
     '<li><span class="legend-swatch swatch-full"></span>Full dependency (solid)</li>',
     '<li><span class="legend-swatch swatch-partial"></span>Partial dependency (dashed, named completion point)</li>',
+    '<li><span class="legend-swatch swatch-unmet"></span>红线：前置依赖未满足；原色：已满足</li>',
     '<li><span class="legend-swatch swatch-derives"></span>Derives from a source (gray dotted, informational)</li>',
+    '<li><span class="legend-swatch swatch-contract"></span>遵循契约（青色点划线，不等待完成）</li>',
     '<li><span class="legend-swatch swatch-target"></span>Completion target of a composite task</li>',
     '<li><span class="legend-swatch swatch-done"></span>&#10003; finished</li>',
     '<li><span class="legend-swatch swatch-running"></span>&#9679; running</li>',
@@ -75,6 +88,8 @@ export function renderIndexHtml(projection: GraphProjection): string {
     '</aside>',
     '</div>',
     `<script id="${GRAPH_DATA_ELEMENT_ID}" type="application/json">${data}</script>`,
+    `<script id="layout-engine">${ELK_JS}</script>`,
+    `<script id="layout-adapter">${VIEWER_LAYOUT_JS}</script>`,
     `<script>${VIEWER_JS}</script>`,
     '</body>',
     '</html>',
@@ -93,6 +108,12 @@ body { margin:0; font:14px/1.5 system-ui,-apple-system,"Segoe UI","Microsoft YaH
 #breadcrumbs { display:flex; gap:6px; flex:1; flex-wrap:wrap; font-size:13px; }
 #breadcrumbs button { border:0; background:none; color:var(--accent); cursor:pointer; padding:2px 4px; }
 #viewport-controls button { min-width:32px; height:28px; margin-left:4px; border:1px solid var(--line); background:var(--panel); border-radius:6px; cursor:pointer; }
+#viewport-controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+#viewport-controls label { display:inline-flex; align-items:center; gap:4px; font-size:12px; white-space:nowrap; }
+#layout-direction { padding:4px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--text); }
+#layout-status { font-size:11px; color:var(--muted); }
+.layout-group { fill:#eef2f6; fill-opacity:.5; stroke:#cbd5e1; stroke-dasharray:6 5; }
+.layout-group-label { font-size:12px; fill:#667085; }
 #layout { display:grid; grid-template-columns:200px minmax(260px,1fr) minmax(340px,400px); height:calc(100vh - 53px); }
 #nav,#filters,#details { overflow:auto; padding:12px; background:var(--panel); border-right:1px solid var(--line); }
 #details { border-right:0; border-left:1px solid var(--line); }
@@ -134,10 +155,26 @@ body { margin:0; font:14px/1.5 system-ui,-apple-system,"Segoe UI","Microsoft YaH
 .node.completion-target .title { font-weight:600; }
 .node.source .node-body { fill:#f9fafb; stroke:#98a2b3; stroke-dasharray:4 3; }
 .node.source text { fill:var(--muted); }
+.node.contract .node-body { fill:#ecfdfb; stroke:#087f8c; stroke-width:2; }
+.node.contract text { fill:#075963; font-size:12px; }
+.contract-sheet { fill:#d6eeeb; stroke:#72b5b0; }
+.contract-row { fill:#f4fcfa; stroke:#b7dcd6; stroke-width:1; }
+.contract-section:hover .contract-row, .contract-section.selected .contract-row { fill:#cfefe8; }
+.contract-section:focus .contract-row { stroke:#075963; stroke-width:2; }
+.contract-port { fill:#087f8c; stroke:#fff; stroke-width:1; }
+.contract-toggle { fill:#d6eeeb; }
+.edge-contract { stroke:#087f8c; stroke-width:1.5; stroke-dasharray:8 3 2 3; }
+.swatch-contract { background:#ecfdfb; border:1px dashed #087f8c; }
 
 .edge { fill:none; }
+.edge { vector-effect:non-scaling-stroke; }
+.edge.related { opacity:1; stroke-width:2.4; }
+.edge.unrelated { opacity:.16; }
 .edge-full { stroke:#475467; stroke-width:1.6; }
 .edge-partial { stroke:#7a5af8; stroke-width:1.6; stroke-dasharray:7 4; }
+.edge.edge-unmet { stroke:#d92d20; }
+.edge-label.edge-unmet { fill:#d92d20; }
+.swatch-unmet { background:#d92d20; }
 .edge-derives { stroke:#98a2b3; stroke-width:1.4; stroke-dasharray:2 4; }
 .edge-label { font-size:10px; fill:#7a5af8; }
 #canvas-message { position:absolute; inset:auto 16px 16px; padding:10px 12px; margin:0; background:#fff4f3; border:1px solid #fecdca; border-radius:8px; }

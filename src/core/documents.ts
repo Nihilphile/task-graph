@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { selectContractText } from './contract-sections.js';
 import { readFileSync, realpathSync, statSync, accessSync, constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { Marked } from 'marked';
@@ -10,8 +11,9 @@ import { loadTaskRepository } from './repo.js';
 import { computeReadiness } from './readiness.js';
 import { taskContext, formatTaskContext, contextFiles, type ContextOptions } from './task-context.js';
 
-export type DocumentKind = 'content' | 'review-requirement' | 'report' | 'log' | 'handoff' | 'reference' | 'output';
+export type DocumentKind = 'content' | 'contract' | 'review-requirement' | 'report' | 'log' | 'handoff' | 'reference' | 'output';
 export interface DocumentView {
+  readonly sections?: readonly string[];
   readonly id: string;
   readonly kind: DocumentKind;
   readonly title: string;
@@ -31,6 +33,7 @@ export interface DocumentView {
   readonly error?: string;
 }
 export interface TaskDocuments {
+  readonly contracts?: readonly DocumentView[];
   readonly reviewRequirements: readonly DocumentView[];
   readonly content: DocumentView;
   readonly contents: readonly DocumentView[];
@@ -42,7 +45,7 @@ export interface TaskDocuments {
 }
 
 const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
-function renderDocumentMarkdown(root: string, source: string, body: string): string {
+export function renderDocumentMarkdown(root: string, source: string, body: string): string {
   const markdown = new Marked({
     gfm: true,
     renderer: {
@@ -205,13 +208,13 @@ export function appendManagedLog(root: string, current: TaskDocument, transactio
   };
 }
 
-export function documentView(root: string, kind: DocumentKind, output: TaskOutput): DocumentView {
-  const result: DocumentView = { id: `${kind}:${output.path}:${output.sha256 ?? ''}`, kind, title: output.title || output.note || path.posix.basename(output.path), ...output };
+export function documentView(root: string, kind: DocumentKind, output: TaskOutput, sections?: readonly string[]): DocumentView {
+  const result: DocumentView = { id: `${kind}:${output.path}:${output.sha256 ?? ''}`, kind, title: output.title || output.note || path.posix.basename(output.path), ...output, ...(sections ? { sections } : {}) };
   const file = output.snapshot ?? output.path;
   try {
     const bytes = readDocument(root, file);
     if (/\.(md|markdown|txt)$/i.test(file) || (kind === 'reference' && /\.(ts|tsx|js|jsx|mjs|cjs|json|ya?ml|py|rs|go|java|c|h|cpp|cs|sh|ps1|sql|toml|xml|html|css|log)$/i.test(file))) {
-      const body = bytes.toString('utf8');
+      const body = kind === 'contract' ? selectContractText(bytes.toString('utf8'), sections) : bytes.toString('utf8');
       return { ...result, body, html: /\.(md|markdown)$/i.test(file) ? renderDocumentMarkdown(root, output.path, body) : `<pre>${escapeHtml(body)}</pre>` };
     }
     // Other file formats retain a link relative to generated/index.html.
@@ -277,6 +280,7 @@ export function agentHandoff(root: string, task: TaskDocument, options: HandoffO
         body = file.kind === 'content' && file.path === `.task-graph/tasks/${task.id}.md` ? task.body
           : file.section === 'work_log' ? /^##[ \t]+工作记录[ \t]*\r?\n([\s\S]*?)(?=^##[ \t]+|(?![\s\S]))/m.exec(task.body)?.[1]?.trim() ?? ''
           : readDocument(root, file.read_path).toString('utf8');
+        if (file.kind === 'contract') body = selectContractText(body, file.sections);
       } catch (cause) { error = cause instanceof Error ? cause.message : String(cause); }
     }
     lines.push(headings[index]!, body ?? error ?? '非文本附件，请按读取路径查看。');

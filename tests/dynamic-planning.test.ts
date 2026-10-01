@@ -1,11 +1,14 @@
+import { attachDocument } from '../src/core/documents.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { main } from '../src/cli/main.js';
 import { initializeProject } from '../src/core/init.js';
 import { useTempWorkspace } from './helpers/temp.js';
 import path from 'node:path';
+import { loadTaskRepository } from '../src/core/repo.js';
+import { serializeTaskDocument } from '../src/core/task.js';
 
-test('Dynamic JSON plans support multiple requirements; added prerequisites require fresh review and replacement preserves mode', async t => {
+test('Dynamic JSON plans retain approval while checking dependencies; replacement requires its own approval', async t => {
   const w = useTempWorkspace(t, 'dynamic-plan');
   initializeProject(w.root, { name: 'Dynamic plan', task: 'Parent' });
   w.write('goal.md', '# Goal'); w.write('criteria.md', '# Criteria'); w.write('ref.md', '# Delivery reference');
@@ -27,16 +30,12 @@ test('Dynamic JSON plans support multiple requirements; added prerequisites requ
   assert.notEqual((await run('task', 'start', b)).code, 0);
   assert.equal((await run('task', 'start', c)).code, 0);
   assert.equal((await run('task', 'complete', c)).code, 0);
-  assert.notEqual((await run('task', 'start', b)).code, 0);
-  assert.equal((await run('task', 'refine', b, '--reason', 'Research reviewed')).code, 0);
   assert.equal((await run('task', 'start', b)).code, 0);
-  assert.equal((await run('task', 'reference', 'attach', b, '--path', 'ref.md')).code, 0);
+  attachDocument(w.root, { id: b, kind: 'reference', path: 'ref.md' });
   assert.equal((await run('task', 'show', b)).task.planningState, 'refined');
   w.write('report.md', '# Verified');
   assert.equal((await run('task', 'complete', b, '--result', 'pass', '--report', 'report.md')).code, 0);
   w.write('criteria.md', '# Updated criteria');
-  assert.notEqual((await run('task', 'reopen', b)).code, 0);
-  assert.equal((await run('task', 'refine', b, '--reason', 'Rework criteria confirmed')).code, 0);
   assert.equal((await run('task', 'reopen', b)).code, 0);
   const replacement = await run('task', 'revise', b, '--replace', '--summary', 'Replacement', '--content', 'goal.md');
   assert.equal(replacement.code, 0);
@@ -48,7 +47,7 @@ test('Dynamic JSON plans support multiple requirements; added prerequisites requ
   assert.notEqual((await run('task', 'start', next.id)).code, 0);
 });
 
-test('Dynamic tasks need explicit assessment and changed requirements/upstream references invalidate it', async t => {
+test('Requirements and upstream edits do not revoke approval; explicit unrefine still blocks start and claims', async t => {
   const w = useTempWorkspace(t, 'dynamic');
   initializeProject(w.root, { name: 'Dynamic', task: 'Upstream' });
   w.write('goal.md', '# Goal'); w.write('ref.md', '# API one');
@@ -59,7 +58,7 @@ test('Dynamic tasks need explicit assessment and changed requirements/upstream r
   }
   const b = (await run('task', 'add', '--summary', 'Consumer', '--content', 'goal.md', '--planning', 'dynamic', '--depends-on', 'T-0001')).task.id;
   assert.notEqual((await run('task', 'refine', b, '--reason', 'too early')).code, 0);
-  await run('task', 'reference', 'attach', 'T-0001', '--path', 'ref.md');
+  attachDocument(w.root, { id: 'T-0001', kind: 'reference', path: 'ref.md' });
   await run('task', 'start', 'T-0001'); await run('task', 'complete', 'T-0001');
   assert.equal((await run('task', 'show', b)).task.planningState, 'awaiting_review');
   assert.ok((await run('task', 'list', '--needs-refinement')).tasks.some((v: {id: string}) => v.id === b));
@@ -67,14 +66,24 @@ test('Dynamic tasks need explicit assessment and changed requirements/upstream r
   assert.notEqual((await run('task', 'claim', b, '--role', 'worker', '--session-id', 'worker')).code, 0);
   assert.equal((await run('task', 'refine', b, '--reason', 'API and acceptance verified')).code, 0);
   assert.equal((await run('task', 'show', b)).task.planningState, 'refined');
+  const approved = loadTaskRepository(w.root).taskById(b)!;
+  assert.equal(approved.refinement?.fingerprint, undefined);
+  // Existing projects retain their old fingerprint, but it no longer controls readiness.
+  w.write(`.task-graph/tasks/${b}.md`, serializeTaskDocument({ ...approved, refinement: { ...approved.refinement!, fingerprint: 'a'.repeat(64) } }));
   w.write('ref.md', '# API two');
-  assert.equal((await run('task', 'show', b)).task.planningState, 'stale');
-  assert.notEqual((await run('task', 'start', b)).code, 0);
-  await run('task', 'refine', b, '--reason', 'updated API verified');
+  w.write('goal.md', '# Goal with revised collaboration wording');
+  assert.equal((await run('task', 'show', b)).task.planningState, 'refined');
+  assert.equal((await run('task', 'list', '--needs-refinement')).tasks.some((v: {id: string}) => v.id === b), false);
   w.write('acceptance.md', '# Acceptance');
-  await run('task', 'content', 'attach', b, '--path', 'acceptance.md');
+  assert.equal((await run('task', 'content', 'attach', b, '--path', 'acceptance.md')).code, 0);
+  assert.equal((await run('task', 'claim', b, '--role', 'worker', '--session-id', 'worker')).code, 0);
+  assert.equal((await run('task', 'release', b)).code, 0);
+  assert.equal((await run('task', 'unrefine', b, '--reason', 'Controller withdrew approval')).code, 0);
   assert.notEqual((await run('task', 'start', b)).code, 0);
-  await run('task', 'refine', b, '--reason', 'all current requirements verified');
+  assert.notEqual((await run('task', 'reassign', b, '--role', 'worker', '--session-id', 'worker')).code, 0);
+  assert.equal((await run('task', 'refine', b, '--reason', 'all current requirements verified')).code, 0);
+  assert.equal((await run('task', 'reassign', b, '--role', 'worker', '--session-id', 'worker')).code, 0);
+  assert.equal((await run('task', 'release', b)).code, 0);
   assert.equal((await run('task', 'start', b)).code, 0);
   assert.notEqual((await run('task', 'content', 'remove', b, '--path', 'acceptance.md')).code, 0);
 });

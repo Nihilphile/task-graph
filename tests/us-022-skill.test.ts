@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { cpSync, readFileSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { EXIT_FAILURE, EXIT_OK } from '../src/cli/context.js';
@@ -11,15 +11,15 @@ function registeredCommands(): string[] {
   return createRegistry().map((command) => command.name);
 }
 
-function readSkillDoc(): string {
-  return readFileSync(path.join(SKILL_ROOT, 'SKILL.md'), 'utf8');
+function readCommandReference(): string {
+  return readFileSync(path.join(SKILL_ROOT, 'references/commands.md'), 'utf8');
 }
 
 test('US-022: the packaged skill validates against the real CLI', () => {
   const issues = validateSkillPackage({ skillRoot: SKILL_ROOT, commands: registeredCommands() });
   assert.deepEqual(issues, []);
 
-  const documented = documentedCommands(readSkillDoc());
+  const documented = documentedCommands(readCommandReference());
   assert.deepEqual(
     [...documented].sort(),
     [...registeredCommands()].sort(),
@@ -27,25 +27,17 @@ test('US-022: the packaged skill validates against the real CLI', () => {
   );
 });
 
-test('US-022: SKILL.md covers initialisation, edits, validation and building', () => {
-  // Check documented concepts using the actual Chinese headings and command names.
-  const text = readSkillDoc().replace(/\s+/g, ' ');
-  for (const required of [
-    '从 PRD 开始',
-    '从聊天任务开始',
-    'source add',
-    'build',
-    'validate',
-    'Markdown 正文可直接编辑',
-    '普通施工由主控',
-    '独立审查者',
-    'pending_review',
-    'codex exec',
-    '$task-graph',
-    'readiness',
-  ]) {
-    assert.ok(text.includes(required), `SKILL.md must mention "${required}"`);
+test('US-022: role routes survive relocation and broken operation links are reported', t => {
+  const workspace = useTempWorkspace(t, 'skill-routes');
+  for (const file of ['SKILL.md', 'skills', 'references', 'agents']) {
+    cpSync(path.join(SKILL_ROOT, file), workspace.file(file), { recursive: true });
   }
+  assert.deepEqual(validateSkillPackage({ skillRoot: workspace.root, commands: registeredCommands() }), []);
+  unlinkSync(workspace.file('references/operations/review-submit.md'));
+  const issues = validateSkillPackage({ skillRoot: workspace.root, commands: registeredCommands() });
+  assert.ok(issues.some(issue => issue.code === 'E_SKILL_REFERENCE' && issue.file === path.join('skills', 'task-review', 'SKILL.md')));
+  unlinkSync(workspace.file('references/commands.md'));
+  assert.ok(validateSkillPackage({ skillRoot: workspace.root, commands: registeredCommands() }).some(issue => issue.code === 'E_SKILL_COMMAND_FILE'));
 });
 
 test('US-022: skill validation reports every drift between docs and CLI', () => {
@@ -57,6 +49,7 @@ test('US-022: skill validation reports every drift between docs and CLI', () => 
     '---\nname: task-graph\ndescription: A long enough description of the task graph skill.\n---\n\nUse `$task-graph`.\n\n| Command | Purpose |\n| --- | --- |\n| `task explode` | does not exist |\n',
   );
   workspace.write('agents/openai.yaml', 'name: task-graph\nentrypoint: SKILL.md\n');
+  workspace.write('references/commands.md', '| Command | Purpose |\n| --- | --- |\n| `task explode` | does not exist |\n');
   let issues = validateSkillPackage({ skillRoot: workspace.root, commands: registeredCommands() });
   assert.equal(issues.some((issue) => issue.code === 'E_SKILL_COMMAND_UNKNOWN'), true);
   assert.equal(issues.some((issue) => issue.code === 'E_SKILL_COMMAND_UNDOCUMENTED'), true);

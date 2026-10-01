@@ -13,7 +13,7 @@ export function taskAddCommand(): CommandSpec {
     name: 'task add',
     summary: 'Create tasks with content bindings and dependency arrays, individually or from a JSON plan',
     usage:
-      'task-graph task add (--summary <text> [--content <path>]... | --from <plan.json>) [--planning static|dynamic] [--kind work|acceptance|decision] [--graph G-NNN | --parent-task T-NNNN] [--depends-on T-NNNN[:gate]]... [--key <key>] [--actor <name>] [--cwd <dir>] [--json]',
+      'task-graph task add (--summary <text> [--content <path>]... | --from <plan.json>) [--planning static|dynamic] [--kind work|acceptance|decision] [--graph G-NNN | --parent-task T-NNNN] [--depends-on T-NNNN[:gate]]... [--contract C-NNNN[#section] ...] [--reference R-NNNN ...] [--key <key>] [--actor <name>] [--cwd <dir>] [--json]',
     details: [
       'Content is a project-relative Markdown/text file, shared by the controller, worker and viewer.',
       'Repeat --content, or use a content array in JSON. All current content files jointly define the requirements.',
@@ -27,7 +27,7 @@ export function taskAddCommand(): CommandSpec {
     run(ctx: CliContext, args): number {
       const root = resolveCwd(ctx, args);
       if (args.opt('from') !== undefined) {
-        for (const option of ['summary', 'title', 'content', 'planning', 'kind', 'parent-task', 'depends-on', 'key', 'goal', 'condition', 'work-log', 'blocker', 'derived-from']) {
+        for (const option of ['summary', 'title', 'content', 'planning', 'kind', 'parent-task', 'depends-on', 'key', 'goal', 'condition', 'work-log', 'blocker', 'derived-from', 'contract', 'reference']) {
           if (args.has(option)) throw usageError(`Put --${option} inside the plan when using --from.`);
         }
         const plan = readTaskPlan(path.resolve(ctx.cwd, args.opt('from')!));
@@ -51,6 +51,8 @@ export function taskAddCommand(): CommandSpec {
         graph: args.opt('graph'),
         title,
         summary,
+        ...(args.has('contract') ? { contracts: args.all('contract') } : {}),
+        ...(args.has('reference') ? { references: args.all('reference') } : {}),
         content: args.opt('content'),
         planning: choice(args.opt('planning'), ['static', 'dynamic'] as const, 'planning'),
         kind: choice(args.opt('kind'), ['work', 'acceptance', 'decision'] as const, 'kind'),

@@ -50,6 +50,7 @@ test('US-021: pan, zoom and fit-to-view transform the canvas', async (t) => {
   assert.deepEqual([...page.errors], []);
 
   const start = viewportTranslate(page);
+  const initialScale = viewportScale(page);
   mouseDrag(page, { x: 20, y: 20 }, { x: 60, y: 45 });
   const dragged = viewportTranslate(page);
   assert.equal(dragged.x, start.x + 40);
@@ -57,17 +58,17 @@ test('US-021: pan, zoom and fit-to-view transform the canvas', async (t) => {
   assert.equal(page.document.getElementById('graph')!.classList.contains('dragging'), false);
 
   click(page, page.document.querySelector('[data-view="zoom-in"]')!);
-  assert.ok(Math.abs(viewportScale(page) - 1.2) < 1e-9);
+  assert.ok(Math.abs(viewportScale(page) - initialScale * 1.2) < 1e-9);
   click(page, page.document.querySelector('[data-view="zoom-out"]')!);
-  assert.ok(Math.abs(viewportScale(page) - 1) < 1e-9);
+  assert.ok(Math.abs(viewportScale(page) - initialScale) < 1e-9);
   wheel(page, -100);
-  assert.ok(Math.abs(viewportScale(page) - 1.1) < 1e-9);
+  assert.ok(Math.abs(viewportScale(page) - initialScale * 1.1) < 1e-9);
   wheel(page, 100);
-  assert.ok(Math.abs(viewportScale(page) - 1) < 1e-9);
+  assert.ok(Math.abs(viewportScale(page) - initialScale) < 1e-9);
 
   click(page, page.document.querySelector('[data-view="fit"]')!);
   const fitted = viewportScale(page);
-  assert.ok(fitted >= 0.2 && fitted <= 1.4, `fit must clamp into its supported range, got ${fitted}`);
+  assert.ok(fitted >= 0.005 && fitted <= 1.4, `fit must clamp into its supported range, got ${fitted}`);
   const offset = viewportTranslate(page);
   for (const node of page.document.querySelectorAll('#graph g.node')) {
     const position = /translate\(([-\d.]+),([-\d.]+)\)/.exec(node.getAttribute('transform') ?? '');

@@ -1,9 +1,13 @@
 import path from 'node:path';
-import { documentMetadata, documentPath, documentView, type DocumentView, type DocumentKind } from './documents.js';
+import { groupedContracts, selectContractText } from './contract-sections.js';
+import { readKnowledge, type CodeReference } from './knowledge-store.js';
+import { documentMetadata, documentPath, documentView, readDocument, type DocumentView, type DocumentKind } from './documents.js';
 import { loadTaskRepository, type TaskRepository } from './repo.js';
 import { contentBindings, type TaskDocument, type TaskOutput } from './task.js';
 
 export interface ContextFile {
+  readonly sections?: readonly string[];
+  readonly id?: string;
   readonly path: string;
   readonly read_path: string;
   readonly title: string;
@@ -24,6 +28,8 @@ export interface ContextReference extends ContextFile {
   readonly scope: 'self' | 'dependency';
 }
 export interface TaskContext {
+  readonly contracts: readonly ContextFile[];
+  readonly code_references: readonly CodeReference[];
   readonly project_root: string;
   readonly content: ContextFile;
   readonly contents: readonly ContextFile[];
@@ -94,11 +100,18 @@ export function taskContext(root: string, task: TaskDocument, repository = loadT
   const content = contents[0]!;
   const contentExcluded = paths.has(key(`.task-graph/tasks/${task.id}.md`));
   const logs = entries.filter(o => o.kind === 'log');
+  const knowledge = knowledgeContext(root, task, repository);
+  const contracts = knowledge.contracts.filter(c => {
+    if (!paths.has(key(c.path))) return true;
+    excluded.push({ source_task: task.id, kind: 'contract', path: c.path, reason: 'excluded_path' });
+    return false;
+  });
   if (/^##[ \t]+工作记录[ \t]*\r?\n\s*\S/m.test(task.body) && !contentExcluded) {
     logs.push({ ...filePointer(root, { path: `.task-graph/tasks/${task.id}.md`, title: '任务正文中的工作记录' }), kind: 'log', source_task: task.id, scope: 'self', section: 'work_log' });
   }
   return {
     project_root: path.resolve(root),
+    ...knowledge, contracts,
     content, contents, review_requirements: entries.filter(o => o.kind === 'review-requirement'),
     references: entries.filter(o => o.kind === 'reference'),
     handoffs: entries.filter(o => o.kind === 'handoff'),
@@ -108,7 +121,29 @@ export function taskContext(root: string, task: TaskDocument, repository = loadT
 }
 
 export function contextFiles(context: TaskContext): readonly ContextFile[] {
-  return [...context.contents, ...context.review_requirements, ...context.references, ...context.reports, ...context.logs, ...context.handoffs, ...context.outputs].filter(o => !o.excluded);
+  return [...context.contents, ...context.contracts, ...context.review_requirements, ...context.references, ...context.reports, ...context.logs, ...context.handoffs, ...context.outputs].filter(o => !o.excluded);
+}
+
+export function knowledgeContext(root: string, task: TaskDocument, repository = loadTaskRepository(root)) {
+  const store = readKnowledge(root);
+  const sourceIds = new Set([task.id, ...task.dependsOn.map(d => d.task)]);
+  for (const d of task.dependsOn) if (d.mode === 'partial') {
+    for (const id of repository.taskById(d.task)?.subgraph?.exposes.find(g => g.name === d.gate)?.requires ?? []) sourceIds.add(id);
+  }
+  const referenceIds = new Set<string>();
+  for (const id of sourceIds) for (const r of repository.taskById(id)?.references ?? []) referenceIds.add(r);
+  const groups = groupedContracts(task.contracts);
+  const contracts = store.contracts.filter(c => groups.has(c.id)).map(c => {
+    for (const r of c.references) referenceIds.add(r);
+    const sections = groups.get(c.id);
+    const pointer = filePointer(root, { path: c.file, title: c.title });
+    if (sections && !pointer.error) {
+      try { return { ...pointer, sections, size_bytes: Buffer.byteLength(selectContractText(readDocument(root, c.file).toString('utf8'), sections)), kind: 'contract' as const, id: c.id, source_task: task.id, scope: 'self' as const }; }
+      catch (error) { return { ...pointer, sections, error: String(error), kind: 'contract' as const, id: c.id, source_task: task.id, scope: 'self' as const }; }
+    }
+    return { ...pointer, kind: 'contract' as const, id: c.id, source_task: task.id, scope: 'self' as const };
+  });
+  return { contracts, code_references: store.references.filter(r => referenceIds.has(r.id)) };
 }
 
 export function referenceDocuments(root: string, task: TaskDocument, repository = loadTaskRepository(root)): DocumentView[] {
@@ -122,6 +157,8 @@ export function referenceDocuments(root: string, task: TaskDocument, repository 
 export function formatTaskContext(context: TaskContext, options: { portable?: boolean; detail?: boolean } = {}): string {
   const lines = ['## 接手文件索引', options.portable ? '以下路径均相对于项目根目录。' : `项目根目录：${context.project_root}`, `任务要求：${context.content.read_path}`];
   if (context.content.error) lines.push(`要求文件错误：${context.content.error}`);
+  for (const c of context.contracts) lines.push(`当前契约：${c.read_path} · ${c.title}${c.sections ? ' · 章节：' + c.sections.join(', ') : ' · 全文'}${c.error ? ' · ' + c.error : ''}`);
+  for (const r of context.code_references) lines.push(`代码入口 ${r.id}：${r.path}:${r.line}（${r.symbol}）｜${r.summary}`);
   for (const file of context.contents.slice(1)) lines.push(`任务要求：${file.read_path}${file.summary ? ' · ' + file.summary : ''}${file.error ? ' · ' + file.error : ''}${file.excluded ? ' · 已排除' : ''}`);
   for (const entry of context.references) {
     lines.push(`- ${entry.scope === 'self' ? '本任务' : '依赖'} ${entry.source_task} · ${entry.title}：${entry.read_path} (${entry.mode})${entry.summary ? '\n  ' + entry.summary : ''}${entry.error ? '\n  错误：' + entry.error : ''}`);

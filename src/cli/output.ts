@@ -5,6 +5,8 @@ import type { TaskOutput } from '../core/task.js';
 import { currentReview, readReviewState, reviewView } from '../core/review-state.js';
 
 export interface FilePointer {
+  sections?: readonly string[];
+  id?: string;
   path?: string; read_path?: string; snapshot?: string; title?: string; summary?: string;
   mode?: string; source_task?: string; scope?: string; section?: string; error?: string;
   excluded?: string; body?: string;
@@ -15,6 +17,8 @@ export function fileView<T extends FilePointer>(file: T, detail = false) {
   if (detail) return file;
   const read_path = file.read_path ?? file.snapshot ?? file.path;
   return {
+    ...(file.id ? { id: file.id } : {}),
+    ...(file.sections ? { sections: file.sections } : {}),
     read_path,
     ...(file.path && file.path !== read_path ? { path: file.path } : {}),
     ...(file.summary ? { summary: file.summary } : file.title ? { title: file.title } : {}),
@@ -29,8 +33,9 @@ export function fileView<T extends FilePointer>(file: T, detail = false) {
 
 export function contextView(context: TaskContext, detail = false) {
   if (detail) return context;
-  const groups = ['contents', 'review_requirements', 'references', 'reports', 'logs', 'handoffs', 'outputs'] as const;
+  const groups = ['contents', 'contracts', 'review_requirements', 'references', 'reports', 'logs', 'handoffs', 'outputs'] as const;
   return { project_root: context.project_root,
+    ...(context.code_references.length ? { code_references: context.code_references } : {}),
     ...Object.fromEntries(groups.filter(k => context[k].length).map(k => [k, context[k].map(f => fileView(f))])),
     ...(context.excluded.length ? { excluded_count: context.excluded.length } : {}),
   };

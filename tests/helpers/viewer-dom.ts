@@ -51,13 +51,27 @@ export async function openViewer(
   if (svg && typeof svg.getBBox !== 'function') {
     svg.getBBox = () => ({ x: 0, y: 0, width: 0, height: 0 });
   }
-  return {
+  const page = {
     dom,
     window: dom.window,
     document: dom.window.document,
     errors,
     close: () => dom.window.close(),
   };
+  await waitForLayout(page);
+  return page;
+}
+
+/** Assert against the completed layout, not the synchronous provisional view. */
+export async function waitForLayout(page: ViewerPage): Promise<void> {
+  const deadline = Date.now() + 10000;
+  while (page.document.getElementById('graph')?.getAttribute('data-layout-state') === 'pending') {
+    if (Date.now() > deadline) throw new Error('Viewer layout did not settle');
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  if (page.document.getElementById('graph')?.getAttribute('data-layout-state') === 'fallback') {
+    throw new Error('Embedded ELK layout failed');
+  }
 }
 
 export function taskNodes(page: ViewerPage): Element[] {

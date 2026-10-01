@@ -47,8 +47,10 @@ test('US-017: build writes a self-contained index.html', () => {
   assert.equal(html.includes('<img '), false);
   assert.equal(/<script[^>]+src=/.test(html), false);
 
-  // No network resource: the SVG namespace is the only absolute URL allowed.
-  const urls = html.match(/https?:\/\/[^\s"'<>)]+/g) ?? [];
+  assert.ok(html.includes('<script id="layout-engine">'), 'layout engine must be embedded');
+  // Vendor license/diagnostic strings may contain URLs; they are not resource
+  // requests. The application still has no network URLs or external scripts.
+  const urls = inlineAppScript(html).match(/https?:\/\/[^\s"'<>)]+/g) ?? [];
   for (const url of urls) {
     assert.equal(url, 'http://www.w3.org/2000/svg');
   }

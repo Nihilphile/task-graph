@@ -10,7 +10,7 @@ export function skillValidateCommand(): CommandSpec {
     summary: 'Validate SKILL.md and agents/openai.yaml against the real CLI',
     usage: 'task-graph skill validate [--root <skill-dir>] [--json]',
     details: [
-      'Checks the SKILL.md frontmatter, the explicit $task-graph trigger and the documented command table.',
+      'Checks SKILL.md metadata, bundled reference links and references/commands.md against registered commands.',
       'Every documented command must exist in this CLI and every registered command must be documented.',
       'agents/openai.yaml must match the skill name and declare review execution/failure detection; stale-claim release and automatic retry/rescheduling remain disabled.',
     ],

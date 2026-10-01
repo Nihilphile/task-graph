@@ -33,6 +33,8 @@ export const TASK_FRONTMATTER_FIELDS = [
   'subgraph',
   'supersedes',
   'derived_from',
+  'contracts',
+  'references',
   'outputs',
   'history',
 ] as const;
@@ -92,7 +94,7 @@ export interface TaskHistoryEntry {
 export interface TaskDocument {
   readonly planning?: 'static' | 'dynamic';
   readonly kind?: 'work' | 'acceptance' | 'decision';
-  readonly refinement?: { readonly at: string; readonly actor: string | null; readonly reason: string; readonly fingerprint: string };
+  readonly refinement?: { readonly at: string; readonly actor: string | null; readonly reason: string; readonly fingerprint?: string };
   readonly id: string;
   readonly summary?: string;
   readonly content?: string;
@@ -107,6 +109,8 @@ export interface TaskDocument {
   readonly subgraph: TaskSubgraph | null;
   readonly supersedes: readonly string[];
   readonly derivedFrom: readonly string[];
+  readonly contracts?: readonly string[];
+  readonly references?: readonly string[];
   readonly outputs: readonly TaskOutput[];
   readonly history: readonly TaskHistoryEntry[];
   /** Summary when present; otherwise the first Markdown H1. */
@@ -200,7 +204,7 @@ function readTaskFields(
   if (value['planning'] !== undefined && !['static', 'dynamic'].includes(String(value['planning']))) throw new TaskGraphError('E_TASK_FORMAT', 'planning must be static or dynamic');
   if (value['kind'] !== undefined && !['work', 'acceptance', 'decision'].includes(String(value['kind']))) throw new TaskGraphError('E_TASK_FORMAT', 'kind must be work, acceptance or decision');
   const refinement = value['refinement'];
-  if (refinement !== undefined && (!isPlainObject(refinement) || typeof refinement['at'] !== 'string' || !isTimestamp(refinement['at']) || typeof refinement['reason'] !== 'string' || !refinement['reason'].trim() || typeof refinement['fingerprint'] !== 'string' || !/^[a-f0-9]{64}$/.test(refinement['fingerprint']) || (refinement['actor'] !== null && typeof refinement['actor'] !== 'string'))) throw new TaskGraphError('E_TASK_FORMAT', 'Invalid refinement record');
+  if (refinement !== undefined && (!isPlainObject(refinement) || typeof refinement['at'] !== 'string' || !isTimestamp(refinement['at']) || typeof refinement['reason'] !== 'string' || !refinement['reason'].trim() || (refinement['fingerprint'] !== undefined && (typeof refinement['fingerprint'] !== 'string' || !/^[a-f0-9]{64}$/.test(refinement['fingerprint']))) || (refinement['actor'] !== null && typeof refinement['actor'] !== 'string'))) throw new TaskGraphError('E_TASK_FORMAT', 'Invalid refinement record');
 
   return {
     id,
@@ -220,6 +224,8 @@ function readTaskFields(
     subgraph: readSubgraph(value['subgraph'], source),
     supersedes: readStringArray(value['supersedes'], source, 'supersedes'),
     derivedFrom: readStringArray(value['derived_from'], source, 'derived_from'),
+    ...(value['contracts'] === undefined ? {} : { contracts: readStringArray(value['contracts'], source, 'contracts') }),
+    ...(value['references'] === undefined ? {} : { references: readStringArray(value['references'], source, 'references') }),
     outputs: readOutputs(value['outputs'], source),
     history: readHistory(value['history'], source),
     title: readOptionalString(value['summary'], source, 'summary') ?? extractTaskTitle(body, source),
@@ -665,6 +671,8 @@ export function serializeTaskDocument(document: TaskDocument): string {
       : null,
     supersedes: [...document.supersedes],
     derived_from: [...document.derivedFrom],
+    ...(document.contracts?.length ? { contracts: [...document.contracts] } : {}),
+    ...(document.references?.length ? { references: [...document.references] } : {}),
     outputs: document.outputs.map(({ addedAt, ...output }) => ({ ...output, ...(addedAt === undefined ? {} : { added_at: addedAt }) })),
     history: document.history.map((entry) => {
       const record: Record<string, HistoryValue> = {

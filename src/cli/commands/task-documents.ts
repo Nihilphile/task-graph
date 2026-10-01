@@ -6,11 +6,11 @@ import { attachmentView, emitResult, visibleOutputs } from '../output.js';
 
 export function taskDocumentCommands(): readonly CommandSpec[] {
   return [
-    ...(['content', 'review-requirement', 'report', 'log', 'handoff', 'reference'] as const).map((kind): CommandSpec => ({
+    ...(['content', 'review-requirement', 'report', 'log', 'handoff'] as const).map((kind): CommandSpec => ({
       name: `task ${kind} attach`,
       summary: `Attach a ${kind} file for offline reading from a task label`,
-      usage: `task-graph task ${kind} attach T-NNNN --path <file> [--title <text>] [--summary <text>] [--audience agent|user]${kind === 'reference' ? ' [--snapshot]' : ''} [--actor <name>] [--cwd <dir>] [--json]`,
-      details: [kind === 'content' ? 'Append a live requirements file. All content files jointly define the task; agent audience only. Start freezes the requirements for audit.' : kind === 'reference' ? 'References follow the live file by default; --snapshot freezes a version. Successors discover references through task dependencies.' : kind === 'log' ? 'Log files are live references; task log appends to the managed work log.' : 'The file is snapshotted at attachment time for later audit. Markdown/text is embedded in the offline viewer.', 'Paths are relative to the project root. Files must exist. Summary is optional and describes the file.'],
+      usage: `task-graph task ${kind} attach T-NNNN --path <file> [--title <text>] [--summary <text>] [--audience agent|user] [--actor <name>] [--cwd <dir>] [--json]`,
+      details: [kind === 'content' ? 'Append a live requirements file. All content files jointly define the task; agent audience only. Start freezes the requirements for audit.' : kind === 'log' ? 'Log files are live references; task log appends to the managed work log.' : 'The file is snapshotted at attachment time for later audit. Markdown/text is embedded in the offline viewer.', 'Paths are relative to the project root. Files must exist. Summary is optional and describes the file.'],
       run(ctx, args): number {
         const id = args.positionals[0];
         const file = args.opt('path');

@@ -1,6 +1,6 @@
 {
   "name": "task-graph",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Task Graph skill: maintain task DAGs as Markdown with YAML frontmatter and generate a self-contained read-only HTML viewer.",
@@ -32,6 +32,7 @@
     "task-graph": "node dist/src/cli.js"
   },
   "dependencies": {
+    "elkjs": "0.12.0",
     "marked": "^15.0.7",
     "yaml": "^2.7.0"
   },

@@ -48,7 +48,7 @@ function listCommand(): CommandSpec {
       }
       const tasks = repository.tasks.map(task => ({ ...task, ...readinessById.get(task.id)! }))
         .filter((task) => !args.flag('available') || (task.status === 'todo' && task.readiness === 'ready' && task.claim === null))
-        .filter(task => !args.flag('needs-refinement') || (['todo', 'reject'].includes(task.status) && !task.claim && ['awaiting_review', 'stale'].includes(task.planningState ?? '') && task.blockedBy.every(b => b.kind === 'refinement')))
+        .filter(task => !args.flag('needs-refinement') || (['todo', 'reject'].includes(task.status) && !task.claim && task.planningState === 'awaiting_review' && task.blockedBy.every(b => b.kind === 'refinement')))
         .filter((task) => !graph || task.graph === graph)
         .filter((task) => !status || task.status === status)
         .filter((task) => !readiness || task.readiness === readiness)
@@ -75,7 +75,7 @@ function showCommand(): CommandSpec {
   return {
     name: 'task show',
     summary: 'Show task facts and a file manifest; expand selected bodies explicitly',
-    usage: 'task-graph task show T-NNNN [--manifest] [--handoff] [--expand content|review-requirement|report|log|reference|handoff|output]... [--expand-path <file>]... [--exclude-path <file>]... [--preview] [--cwd <dir>] [--json]',
+    usage: 'task-graph task show T-NNNN [--manifest] [--handoff] [--expand content|contract|review-requirement|report|log|reference|handoff|output]... [--expand-path <file>]... [--exclude-path <file>]... [--preview] [--cwd <dir>] [--json]',
     details: ['Default and --manifest return addresses, summaries and provenance without attachment bodies or history text.', 'Repeat --expand to select categories, or --expand-path for specific source/snapshot paths. --preview returns a size estimate without reading bodies.', 'User-audience attachments and unreviewed legacy aggregate handoffs are always excluded. Path filters are exact project-relative paths, not globs.', '--handoff formats the same selected data as Markdown. It no longer implies expanding reports.'],
     run(ctx, args): number {
       const id = args.positionals[0];
@@ -86,7 +86,7 @@ function showCommand(): CommandSpec {
       const source = repository.taskById(id);
       if (!source) throw new TaskGraphError('E_NO_TASK', `Task "${id}" was not found`);
       const expand = args.all('expand');
-      if (expand.some(kind => !['content', 'review-requirement', 'report', 'log', 'reference', 'handoff', 'output'].includes(kind))) throw usageError('Unsupported --expand category');
+      if (expand.some(kind => !['content', 'contract', 'review-requirement', 'report', 'log', 'reference', 'handoff', 'output'].includes(kind))) throw usageError('Unsupported --expand category');
       if (args.flag('manifest') && (expand.length || args.has('expand-path'))) throw usageError('--manifest cannot be combined with body expansion');
       const result = agentHandoff(root, source, { expand: expand as DocumentKind[], expandPaths: args.all('expand-path'), excludePaths: args.all('exclude-path'), preview: args.flag('preview'), detail: args.flag('detail') });
       const context = result.context;
@@ -101,7 +101,7 @@ function showCommand(): CommandSpec {
       const withBody = (file: typeof context.content) => !args.flag('handoff')
         ? result.documents.find(d => d.kind === file.kind && d.source_task === file.source_task && d.read_path === file.read_path && d.section === file.section) ?? file : file;
       if (!args.flag('detail')) {
-        const groups = ['contents', 'review_requirements', 'references', 'reports', 'logs', 'handoffs', 'outputs'] as const;
+        const groups = ['contents', 'contracts', 'review_requirements', 'references', 'reports', 'logs', 'handoffs', 'outputs'] as const;
         const selectedContext = { ...context, ...Object.fromEntries(groups.map(k => [k, context[k].map(withBody)])) };
         const task = { id, graph: source.graph, title: source.title, status: source.status,
           readiness: state.readiness, ...(state.blockedBy.length ? { blockedBy: state.blockedBy } : {}),
@@ -126,7 +126,7 @@ function showCommand(): CommandSpec {
         outputs: source.outputs.filter(o => contextFiles(context).some(f => f.source_task === id && f.path === o.path && f.sha256 === o.sha256)),
         readiness: state.readiness, blockedBy: state.blockedBy,
         ...(github ? { github } : {}),
-        documents: { content: withBody(context.content), contents: context.contents.map(withBody), reviewRequirements: context.review_requirements.map(withBody), references: context.references.map(withBody), reports: context.reports.map(withBody),
+        documents: { contracts: context.contracts.map(withBody), codeReferences: context.code_references, content: withBody(context.content), contents: context.contents.map(withBody), reviewRequirements: context.review_requirements.map(withBody), references: context.references.map(withBody), reports: context.reports.map(withBody),
           logs: context.logs.map(withBody), handoffs: context.handoffs.map(withBody), outputs: context.outputs.map(withBody) } };
       if (args.flag('handoff') && !args.flag('json') && !args.flag('quiet')) {
         ctx.io.out(result.text + (args.flag('preview') ? '\n' + JSON.stringify(result.preview, null, 2) : '') + '\n\n' + formatExecutionGuidance(guidance));

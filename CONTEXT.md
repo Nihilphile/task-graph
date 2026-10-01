@@ -4,6 +4,12 @@
 
 ## Language
 
+**契约（contract）**：共享的当前规则节点，维护唯一正文；任务关联表示必须遵循，不参与执行门禁。
+
+**代码入口（reference）**：可复用的路径、行号、符号和最多 30 字说明条目；旧文件式参考仅保留兼容读取。
+
+**决策登记（decision record）**：一次事务记录已定决定、契约及消费者关系，不代表实现已经完成。
+
 **验收要求（review-requirement，RR）**：任务的验收条件、验证方法和证据要求，可由多份文件共同表达。
 
 **自动审查（auto-review）**：任务提交交付后，由工具启动独立审查者，依据验收要求检查交付的机制。
@@ -28,4 +34,4 @@
 
 **未就绪（unready）**：前置依赖或动态细化门槛尚未满足的派生 readiness；不改写 todo 状态，不产生 blocked 通知。人工或审查问题属于 status=blocked，本身不阻止 start。
 
-**错题本（error-book）**：按拒绝历史聚合的失败复盘。普通 reject 与独立审查 reject 都须提供 error-report；blocked 不代表交付不合格，故不追加错题。
+**错题本（error-book）**：聚合 rejected / error_recorded 历史中的复盘。reject 必须提供 error-report；实际返工可用 record-error 独立登记，不改变状态。blocked 本身不自动追加错题。

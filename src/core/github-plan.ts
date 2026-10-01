@@ -4,6 +4,7 @@ import { readDocument } from './documents.js';
 import { loadTaskRepository, type TaskRepository } from './repo.js';
 import { computeReadiness } from './readiness.js';
 import { contentBindings } from './task.js';
+import { knowledgeContext } from './task-context.js';
 
 export const digest = (text: string): string => createHash('sha256').update(text).digest('hex');
 export interface GitHubTarget { repo: string; container: string }
@@ -65,6 +66,9 @@ export function planGitHub(root: string): GitHubPlan {
     const artifacts = task.outputs.filter(output => !output.kind);
     if (artifacts.length) body += `Artifacts (project-relative paths): ${artifacts.map(output => output.path).join(', ')}\n\n`;
     const references = task.outputs.filter(output => output.kind === 'reference');
+    const knowledge = knowledgeContext(root, task, repository);
+    if (knowledge.contracts.length) body += '## Current contracts (local authority)\n' + knowledge.contracts.map(c => `- ${c.id}: ${c.title} — \`${c.path}\`${c.sections ? ' · sections: ' + c.sections.join(', ') : ''}`).join('\n') + '\n\n';
+    if (knowledge.code_references.length) body += '## Code entries\n' + knowledge.code_references.map(r => `- ${r.id}: \`${r.path}:${r.line}\` (${r.symbol}) — ${r.summary}`).join('\n') + '\n\n';
     if (references.length) body += '## References (project-relative files)\n' + references.map(output => `- ${output.title ?? output.path}: \`${output.path}\` (${output.snapshot ? 'snapshot: ' + output.snapshot : 'live'})${output.summary ? ' — ' + output.summary : ''}`).join('\n') + '\n\n';
     if (content.length > 35000) {
       body += 'Full task requirements are published in comments (content version ' + digest(content).slice(0, 12) + ').';

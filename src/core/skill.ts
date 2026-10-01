@@ -18,7 +18,7 @@ export interface SkillValidationOptions {
 /**
  * Validates the packaged skill instructions against the real CLI.
  *
- * The documented command table must match the registered commands exactly, so
+ * The reference command table must match the registered commands exactly, so
  * the skill can never advertise a command that does not exist nor hide one that
  * does. Metadata in agents/openai.yaml must agree with SKILL.md and must keep
  * the supported review execution and remaining non-responsibilities explicit.
@@ -59,13 +59,18 @@ export function validateSkillPackage(options: SkillValidationOptions): SkillVali
     });
   }
 
-  const documented = documentedCommands(skillText);
+  const catalogFile = 'references/commands.md';
+  const catalog = readTextIfExists(path.join(options.skillRoot, catalogFile));
+  if (catalog === undefined) {
+    issues.push({ code: 'E_SKILL_COMMAND_FILE', file: catalogFile, message: 'The command reference is missing' });
+  }
+  const documented = documentedCommands(catalog ?? '');
   const known = new Set(options.commands);
   for (const command of documented) {
     if (!known.has(command)) {
       issues.push({
         code: 'E_SKILL_COMMAND_UNKNOWN',
-        file: 'SKILL.md',
+        file: catalogFile,
         message: `documented command "${command}" is not registered by the CLI`,
       });
     }
@@ -74,13 +79,41 @@ export function validateSkillPackage(options: SkillValidationOptions): SkillVali
     if (documented.includes(command)) continue;
     issues.push({
       code: 'E_SKILL_COMMAND_UNDOCUMENTED',
-      file: 'SKILL.md',
+      file: catalogFile,
       message: `registered command "${command}" is not documented`,
     });
   }
 
+  inspectReferenceLinks(options.skillRoot, issues);
   inspectAgentMetadata(agentFile, name, issues);
   return issues;
+}
+
+/** Follow bundled Markdown routes without loading unrelated historical reports. */
+function inspectReferenceLinks(root: string, issues: SkillValidationIssue[]): void {
+  const pending = ['SKILL.md'];
+  const seen = new Set<string>();
+  while (pending.length > 0) {
+    const file = pending.pop()!;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const text = readTextIfExists(path.join(root, file));
+    if (text === undefined) continue;
+    const prose = text.replace(/^```[^\n]*\n[\s\S]*?^```[^\n]*$/gm, '');
+    for (const match of prose.matchAll(/\]\(([^)\s]+)\)/g)) {
+      const target = match[1]!.split('#')[0]!;
+      if (!target || /^[a-z][a-z\d+.-]*:/i.test(target) || target.startsWith('//')) continue;
+      const absolute = path.resolve(root, path.dirname(file), target);
+      const relative = path.relative(path.resolve(root), absolute);
+      if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+        issues.push({ code: 'E_SKILL_REFERENCE', file, message: `Reference leaves the package: ${target}` });
+      } else if (readTextIfExists(absolute) === undefined) {
+        issues.push({ code: 'E_SKILL_REFERENCE', file, message: `Unreadable reference: ${target}` });
+      } else if (path.extname(relative) === '.md') {
+        pending.push(relative);
+      }
+    }
+  }
 }
 
 function readFrontmatter(

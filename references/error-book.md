@@ -1,6 +1,14 @@
 # Error-book（错题本）
 
-Reviewer 每次 reject 前写一份简短 Markdown 复盘，通过 `--error-report <项目相对路径>` 和本轮验收结果一起提交。普通 `reject`、`complete --result reject` 和独立审查 `.review finish --result reject` 均要求这个参数；缺失、空文件或文件不可读时整次操作失败，任务状态和领取保持原样。
+错题本接收验收失败及实际发生的返工。reject 按[普通验收任务](operations/acceptance.md)或[独立审查](operations/review-submit.md)提交 `--error-report <项目相对路径>`。
+
+暂停放行指纹后，因中途修改未被察觉而返工或增加步骤，每次记录一条：什么变了、旧认知导致什么问题、额外工作及相关[交付标识](operations/delivery.md)；原因不确定时注明。可复用报告，不另造统计系统。未发生此类损失时不记录。
+
+```text
+CLI 'task[T-0042]' record-error --error-report <项目相对报告.md> --cwd "<项目>" --json
+```
+
+record-error 保存报告快照，不改变状态、领取或依赖，已完成任务也可记录；同一事件已随 reject 保存则不重复记。每次成功调用新增一条，回执不确定时先查 errorbook 再重试。缺失、空白、非 Markdown 或不可读报告均失败且不改变原状态。
 
 小报告采用自由文本，建议三小段即可：
 
@@ -14,17 +22,10 @@ Reviewer 每次 reject 前写一份简短 Markdown 复盘，通过 `--error-repo
 分析与改进：只验证了有数据的路径；修复后增加空结果集用例，并将其加入交付自查。
 ```
 
-由 reviewer 基于本轮证据分析。原因尚未确定时写明待确认项及下一步验证方式。无需固定分类、标签或统计次数。
+由记录者基于实际证据分析，原因未定时注明；无需固定分类或标签。
 
-```text
-CLI 'task[T-0001]' reject --report reports/review.md --error-report reports/error.md --cwd "<项目根目录>" --json
-CLI 'task[T-0001].review' finish --review-id <本轮UUID> --result reject --report reports/review.md --error-report reports/error.md --cwd "<项目根目录>" --json
-CLI 'graph[G-001].errorbook' show --cwd "<项目根目录>" --json
-CLI errorbook list --cwd "<项目根目录>" --json
-```
-
-本轮验收报告已有简短复盘时，两个参数可以指向同一文件。小报告和验收报告都保存快照；每次成功 reject 追加一条记录，复验通过、重用文件名或重建 HTML 均保留旧记录。普通重复提交已 reject 的任务会失败；再次验收须显式 reopen。独立审查同一轮次、相同结果及两份报告的重复 finish 幂等，不追加记录；旧轮次回写会被拒绝。blocked 和审查进程异常不会写入错题本。
+本轮验收报告已有复盘时，两参数可指向同一文件。每次成功 reject 追加一条快照，复验通过或重建保留历史；普通复验须 reopen。独立审查同轮同结果与报告的 finish 幂等，旧轮次回写被拒绝。blocked 和进程异常本身不自动记错。
 
 HTML 每张图都有独立 error-book 方块，点击后按时间显示当前图及其子图的小报告，可跳回对应任务。它不参与任务依赖、领取或完成目标。CLI 的 `errorbook` 查看整个项目，`graph[<ID>].errorbook` 查看该图及子图；`list` 返回文件索引，`show` 展开小报告正文。
 
-记录来源保存在任务的 rejection history，Markdown 快照保存在 `.task-graph/snapshots/`。备份时保留整个 `.task-graph/`。旧版已有 reject 缺少小报告时维持原历史，不自动编造或补写分析。工具校验文件格式与可读性，分析质量由 reviewer 负责。此版本的 error-book 仅在本地 CLI 与 HTML 展示。
+来源为任务的 rejected / error_recorded history，快照在 `.task-graph/snapshots/`；备份保留整个 `.task-graph/`。旧 reject 缺少小报告时不补造。错题本仅在本地 CLI 与 HTML 展示。

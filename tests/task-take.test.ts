@@ -62,7 +62,7 @@ test('Guidance respects text/quiet output and a rejected start preserves the tas
 test('Relocated CLI uses its own bundled skill; a missing guide fails before starting', async t => {
   const install = useTempWorkspace(t, '工具安装');
   const project = useTempWorkspace(t, '执行目录');
-  for (const file of ['dist/src', 'skills', 'package.json']) cpSync(path.join(SKILL_ROOT, file), install.file(file), { recursive: true });
+  for (const file of ['dist/src', 'skills', 'references', 'package.json']) cpSync(path.join(SKILL_ROOT, file), install.file(file), { recursive: true });
   symlinkSync(path.join(SKILL_ROOT, 'node_modules'), install.file('node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
   initializeProject(project.root, { name: 'Relocated', task: 'Work' });
   const invoke = (...args: string[]) => runNodeAsync([install.file('dist/src/cli.js'), ...args, '--cwd', project.root, '--json'], { cwd: project.root });

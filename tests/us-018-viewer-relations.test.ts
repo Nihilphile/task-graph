@@ -41,14 +41,11 @@ test('US-018: the selected graph is laid out left to right', (t) => {
       'a partial successor must be right of its predecessor',
     );
 
-    // Independent branches share a column and the convergence node sits right of
-    // both of them, so parallel work can converge or stop on its own.
+    // Both branches precede their convergence. Disconnected work may occupy a
+    // separate area instead of forcing every root into the first column.
     const blocked = taskNode(page, ids.blocked);
     const ready = taskNode(page, ids.ready);
-    const cancelled = taskNode(page, ids.cancelled);
     const convergence = taskNode(page, ids.convergence);
-    assert.equal(nodeX(blocked), nodeX(ready));
-    assert.equal(nodeX(ready), nodeX(cancelled));
     assert.ok(nodeX(convergence) > nodeX(blocked));
     assert.ok(nodeX(convergence) > nodeX(ready));
     // Independent roots keep their own row instead of being merged.
@@ -78,6 +75,16 @@ test('US-018: full dependencies are solid and partial dependencies are labelled'
     assert.equal(partial.length, 1);
     assert.equal(partial[0]!.getAttribute('data-from'), ids.composite);
     assert.equal(partial[0]!.getAttribute('data-to'), ids.partialSuccessor);
+    // The referenced gate is complete although the composite itself is not.
+    assert.equal(partial[0]!.getAttribute('data-satisfied'), 'true');
+    assert.equal(partial[0]!.classList.contains('edge-unmet'), false);
+    assert.equal(partial[0]!.getAttribute('marker-end'), 'url(#arrow-partial)');
+    for (const edge of edges(page, 'full')) {
+      assert.equal(edge.getAttribute('data-satisfied'), 'false');
+      assert.ok(edge.classList.contains('edge-unmet'));
+      assert.equal(edge.getAttribute('marker-end'), 'url(#arrow-unmet)');
+      assert.match(edge.querySelector('title')!.textContent!, /前置依赖未满足/);
+    }
 
     // The completion point name is rendered next to the dashed edge.
     const labels = [...page.document.querySelectorAll('#graph text.edge-label')].map(

@@ -2,6 +2,8 @@
 
 面向主控与执行 Agent 的本地任务图工具：用 CLI 管理任务要求、依赖、子图、领取、报告与交接，生成可离线阅读的 HTML 看板。可按入口图开启 GitHub issue 自动同步。
 
+0.3.0 增加 [contract 节点、条目式 reference 和一次决策登记](references/operations/contracts.md)。任务放行指纹仍停用，保留 refine/unrefine 和执行依赖检查。实际返工用 [record-error](references/error-book.md) 登记；执行者仅提交本任务修改，提交命名见[交付规则](references/operations/delivery.md)。
+
 ## 资源地址 CLI
 
 优先使用 `CLI 'graph[G-001].task[T-0012]' <动作>`；只知道任务 ID 时可用 `task[T-0012]`。图中的任务集合是 `graph[G-001].task`，材料集合包括 `.content`、`.review-requirement`、`.reference`、`.report`、`.log`、`.handoff`、`.output`，依赖集合是 `.dependency`；独立审查使用任务的 `.auto-review`、`.review` 和图的 `.auto-review`。子图任务可用 `graph[G-001].task[T-0001].subgraph.task[T-0002]`。地址中的归属会被校验；ID 使用实际返回值。
@@ -30,16 +32,21 @@ node dist/src/cli.js help
 
 `dist/` 为本地构建产物，不随源码提交。把本目录作为 Skill 安装时，先完成上述构建，Agent 入口是 [SKILL.md](SKILL.md)。
 
-本仓库同时维护四个配套入口：
+本仓库维护五个角色入口，各 SKILL.md 只路由当前需要的工作流与操作手册：
 
 - [task-graph](SKILL.md)：CLI、任务图和 HTML。
 - [to-task](skills/to-task/SKILL.md)：供主控拆分和编写任务。
 - [to-active-task](skills/to-active-task/SKILL.md)：供主控先建骨架、按实际前置交付逐步细化，与 to-task 二选一。
 - [task-take](skills/task-take/SKILL.md)：供执行者接手、记录上下文和交付。
+- [task-review](skills/task-review/SKILL.md)：供持有 review-id 的独立审查者验证与交卷；启动提示词自动提供入口。
 
-可将相应目录链接到本机技能目录。task-take 也会由 CLI 返回实际路径。验证主控到执行者的配套流程可运行 `npm run test:workflow`。
+可将相应目录链接到本机技能目录。配套 Skill 共用本仓库的 references，安装时保留完整仓库布局；通过 junction/symlink 使用时按真实目标解析相对链接，单独复制某个 skills 子目录不能构成完整安装。task-take 也会由 CLI 返回实际路径。验证主控到执行者的配套流程可运行 `npm run test:workflow`。
+
+`references/workflows/` 说明角色职责和判断原则；`references/operations/` 按功能提供命令、前提与恢复方法。按当前角色和操作读取，不需要通读整套文档。
 
 ## 快速开始
+
+生成的 HTML 默认使用 ELK 自动横向排版：减少连线交叉、绕开卡片，并将没有当前视图连线的节点单独排列。右上角可切换纵向或隐藏契约引用；隐藏引用只影响显示。选中任务或契约会突出其相邻连线，原有详情、章节、筛选和子图导航保持可用。布局引擎随 HTML 内嵌，离线打开无需联网；首次计算完成后自动适配画布，缩放不触发布局重算。若排版失败，页面保留基础布局并显示提示。
 
 下面从工具目录执行；将 `/path/to/project` 替换为要管理的项目根目录。
 
@@ -82,10 +89,10 @@ node dist/src/cli.js 'graph[G-001]' publish --repo owner/repo --cwd /path/to/pro
 
 ## 文档与验证
 
-- [Agent 使用流程](SKILL.md)：首次接手、创建、派工、交付与错误处理。
-- [主控接口参考](references/controller-workflow.md)：批量计划、稳定 key、子图、局部完成点及附件快照。
-- [动态工作流与 Desktop watch](references/dynamic-workflow.md)：多文件 Content、refine、pass/reject 和通知恢复。
-- [独立审查](references/review.md)：RR、自动/手动启动、审查结论和异常恢复。
+- [角色与操作路由](SKILL.md)：选取本次工作所需材料。
+- [主控操作索引](references/controller-workflow.md)：批量计划、关系、材料和维护。
+- [动态操作索引](references/dynamic-workflow.md)：思想、细化、验收和通知的按需入口。
+- [独立审查索引](references/review.md)：区分主控配置与 reviewer 交卷。
 
 ```sh
 npm test

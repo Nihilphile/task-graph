@@ -9,11 +9,18 @@ export const VIEWER_JS = String.raw`
   var TARGET_MARKER = "\u25c6";
   var NODE_W = 220, NODE_H = 76, GAP_X = 110, GAP_Y = 60, PAD = 36;
   var SOURCE_LANE = NODE_W + GAP_X;
+  var CONTRACT_HEADER = 76, CONTRACT_ROW = 38, collapsedContracts = {};
 
   var state = { graph: null, task: null, panel: 'overview', document: null, k: 1, x: PAD, y: PAD,
     filters: { status: [], readiness: [], claim: "" } };
   var graphBounds = { x: 0, y: 0, width: 1, height: 1 };
   var lastNodeClick = { id: null, at: 0 }, collapseTimer = null, suppressClickUntil = 0;
+  var layoutDirection = 'RIGHT', showContracts = true;
+  var layoutCache = new Map(), pendingLayouts = new Map(), layoutFailures = new Set();
+  var activeLayoutKey = null, fitAfterLayout = false, layoutSelection = null, expansionScale = 1.1;
+  var selectionAnchor = null;
+  var readingHash = false;
+  var ownHashChanges = new Map();
 
   var tasksById = {}; DATA.tasks.forEach(function (t) { tasksById[t.id] = t; });
   var graphsById = {}; DATA.graphs.forEach(function (g) { graphsById[g.id] = g; });
@@ -95,18 +102,21 @@ export const VIEWER_JS = String.raw`
   function documentsFor(task) {
     return task.documents || { content: { id: 'content:inline', title: task.title, path: '', html: task.html }, reports: [], logs: [], handoffs: [], outputs: [] };
   }
-  var PANEL_LABELS = { overview: '概览', content: '任务要求', reviewRequirements: '验收要求', references: '参考', reports: '报告', logs: '工作记录', handoffs: '交接', outputs: '产物' };
+  var PANEL_LABELS = { overview: '概览', content: '任务要求', contracts: '当前契约', codeReferences: '代码入口', reviewRequirements: '验收要求', references: '旧文件参考', reports: '报告', logs: '工作记录', handoffs: '交接', outputs: '产物' };
   function tabsFor(task) {
     var docs = documentsFor(task);
     var tabs = [{ key: 'content', label: '任务要求' }];
-    ['reviewRequirements', 'references', 'reports', 'logs', 'handoffs', 'outputs'].forEach(function (key) {
+    if (task.codeReferences && task.codeReferences.length) tabs.push({ key: 'codeReferences', label: '代码入口 · ' + task.codeReferences.length });
+    ['contracts', 'reviewRequirements', 'references', 'reports', 'logs', 'handoffs', 'outputs'].forEach(function (key) {
       if (docs[key] && docs[key].length) tabs.push({ key: key, label: PANEL_LABELS[key] + ' · ' + docs[key].length });
     });
     return tabs;
   }
   function nodeMetrics(task, expanded) {
     var baseWidth = Math.max(NODE_W, Math.min(300, textWidth(task.title, 14) + 32));
-    var scale = expanded ? Math.max(1.1, 1 / state.k) : 1;
+    // Freeze the expanded card's geometry until selection changes. Zoom is a
+    // viewport transform, not a new layout request or a fit/resize feedback loop.
+    var scale = expanded ? expansionScale : 1;
     var width = expanded ? Math.round(baseWidth * 1.25 * scale / 1.1) : baseWidth;
     var lines = wrapText(task.title, width - 32 * scale, 14 * scale, expanded ? 8 : 3);
     var metaY = (45 + (lines.length - 1) * 20 + 24) * scale;
@@ -122,8 +132,7 @@ export const VIEWER_JS = String.raw`
     return { width: width, height: y + 38 * scale, scale: scale, lines: lines, metaY: metaY, tagsY: tagsY, tags: tags };
   }
 
-  // Left-to-right layered layout: each node sits one column right of its
-  // longest dependency path, so branches may converge or end independently.
+  // Immediate provisional layout, also retained if the embedded engine fails.
   function layout(tasks) {
     var ids = {}; tasks.forEach(function (t) { ids[t.id] = true; });
     var depth = {}, visiting = {};
@@ -150,6 +159,77 @@ export const VIEWER_JS = String.raw`
       t.__row = columns[column] - 1;
     });
     return tasks;
+  }
+
+  function routeId(mode, from, to, section) {
+    return JSON.stringify([mode, from, to, section || '']);
+  }
+  function automaticLayout(positions, sourcePositions, contractPositions, visible, sources, contracts) {
+    var input = { graph: state.graph, direction: layoutDirection, nodes: [], edges: [] };
+    [[positions, 'task'], [sourcePositions, 'source'], [contractPositions, 'contract']].forEach(function (pair) {
+      Object.keys(pair[0]).forEach(function (id) {
+        var box = pair[0][id];
+        input.nodes.push({ id: id, kind: pair[1], width: box.width, height: box.height });
+      });
+    });
+    visible.forEach(function (task) {
+      task.dependsOn.forEach(function (dep) {
+        if (!positions[dep.task]) return;
+        var edge = { id: routeId('dependency', dep.task, task.id), from: dep.task, to: task.id };
+        if (dep.mode === 'partial' && dep.gate) { edge.label = dep.gate; edge.labelWidth = textWidth(dep.gate, 10) + 8; }
+        input.edges.push(edge);
+      });
+      task.derivedFrom.forEach(function (id) {
+        if (sourcePositions[id]) input.edges.push({ id: routeId('derives', id, task.id), from: id, to: task.id });
+      });
+    });
+    (DATA.relationships.contracts || []).forEach(function (edge) {
+      if (!contractPositions[edge.from] || !positions[edge.to]) return;
+      var contract = contracts.find(function (c) { return c.id === edge.from; });
+      var index = (contract.sections || []).findIndex(function (s) { return s.id === edge.section; });
+      input.edges.push({ id: routeId('contract', edge.from, edge.to, edge.section), from: edge.from, to: edge.to,
+        portX: NODE_W, portY: index >= 0 && !collapsedContracts[edge.from]
+          ? CONTRACT_HEADER + index * CONTRACT_ROW + CONTRACT_ROW / 2 : CONTRACT_HEADER / 2 });
+    });
+    var key = JSON.stringify(input); activeLayoutKey = key;
+    var cached = layoutCache.get(key), status = document.getElementById('layout-status');
+    var svg = document.getElementById('graph');
+    if (cached) {
+      // Refresh LRU order; navigating to another graph cannot replace this view.
+      layoutCache.delete(key); layoutCache.set(key, cached);
+      [positions, sourcePositions, contractPositions].forEach(function (boxes) {
+        Object.keys(boxes).forEach(function (id) { boxes[id].x = cached.nodes[id].x; boxes[id].y = cached.nodes[id].y; });
+      });
+      svg.setAttribute('data-layout-state', 'ready'); status.textContent = ''; status.title = '';
+      return cached;
+    }
+    if (layoutFailures.has(key)) {
+      svg.setAttribute('data-layout-state', 'fallback'); status.textContent = '基础排版';
+      status.title = '自动排版未完成，已保留可浏览的基础布局。切换排版方向可重试。';
+      return null;
+    }
+    svg.setAttribute('data-layout-state', 'pending'); status.textContent = '排版中…'; status.title = '';
+    if (!pendingLayouts.has(key)) {
+      var pending = Promise.resolve().then(function () { return window.TaskGraphLayout.layout(input); });
+      pendingLayouts.set(key, pending);
+      pending.then(function (result) {
+        layoutCache.set(key, result);
+        if (layoutCache.size > 20) layoutCache.delete(layoutCache.keys().next().value);
+      }, function () {
+        layoutFailures.add(key);
+        if (layoutFailures.size > 20) layoutFailures.delete(layoutFailures.values().next().value);
+      }).then(function () {
+        pendingLayouts.delete(key);
+        if (activeLayoutKey === key && window.document && window.document.getElementById('graph')) renderGraph();
+      });
+    }
+    return null;
+  }
+  function routedPath(automatic, id, from, to) {
+    var edge = automatic && automatic.edges[id];
+    return edge ? edge.sections.map(function (points) {
+      return points.map(function (point, index) { return (index ? 'L ' : 'M ') + point.x + ' ' + point.y; }).join(' ');
+    }).join(' ') : edgePath(from, to);
   }
 
   function activeFilters() {
@@ -272,10 +352,16 @@ export const VIEWER_JS = String.raw`
 
   function renderGraph() {
     var svg = document.getElementById("graph");
+    activeLayoutKey = null;
+    if (layoutSelection !== state.task) {
+      layoutSelection = state.task; expansionScale = Math.max(1.1, 1 / state.k);
+    }
     while (svg.firstChild) svg.removeChild(svg.firstChild);
     if (!graphsById[state.graph]) {
       setMessage('Unknown graph "' + state.graph + '" in the URL hash. Choose an entry graph to continue.', true);
       document.getElementById("filter-summary").textContent = "";
+      svg.setAttribute('data-layout-state', 'empty');
+      document.getElementById('layout-status').textContent = '';
       return;
     }
     var all = tasksInGraph(state.graph);
@@ -283,9 +369,17 @@ export const VIEWER_JS = String.raw`
     var ids = {}; visible.forEach(function (t) { ids[t.id] = true; });
     layout(visible);
     var sources = visibleSources(visible);
-    var offset = sources.length ? SOURCE_LANE : 0;
+    var contracts = showContracts ? (DATA.contracts || []).filter(function (c) { return c.graph === state.graph || visible.some(function (t) { return (t.contracts || []).some(function (binding) { return binding.split('#')[0] === c.id; }); }); }) : [];
+    var offset = sources.length || contracts.length ? SOURCE_LANE : 0;
 
     var viewport = svgEl("g", { id: "viewport", transform: transform() });
+    var defs = svgEl('defs');
+    [['full', '#475467'], ['partial', '#7a5af8'], ['unmet', '#d92d20']].forEach(function (entry) {
+      var marker = svgEl('marker', { id: 'arrow-' + entry[0], viewBox: '0 0 10 10', refX: 9, refY: 5,
+        markerWidth: 6, markerHeight: 6, orient: 'auto', markerUnits: 'userSpaceOnUse' });
+      marker.appendChild(svgEl('path', { d: 'M 1 1 L 9 5 L 1 9 z', fill: entry[1] })); defs.appendChild(marker);
+    });
+    svg.appendChild(defs);
     svg.appendChild(viewport);
     var positions = {}, columnWidths = {}, columnLeft = {}, rowBottom = {};
     visible.forEach(function (task) {
@@ -309,6 +403,30 @@ export const VIEWER_JS = String.raw`
     sources.forEach(function (source, index) {
       sourcePositions[source.id] = { x: PAD, y: PAD + index * (NODE_H + GAP_Y), width: NODE_W, height: NODE_H };
     });
+    var contractPositions = {}, contractTop = PAD + sources.length * (NODE_H + GAP_Y);
+    contracts.forEach(function (c) {
+      var height = CONTRACT_HEADER + (collapsedContracts[c.id] ? 0 : (c.sections || []).length * CONTRACT_ROW) + 12;
+      // Include the stacked sheets in obstacle geometry, not just the front card.
+      contractPositions[c.id] = { x: PAD, y: contractTop, width: NODE_W + 12, height: height };
+      contractTop += height + GAP_Y;
+    });
+    var automatic = automaticLayout(positions, sourcePositions, contractPositions, visible, sources, contracts);
+    if (automatic && automatic.group) {
+      var group = automatic.group;
+      viewport.appendChild(svgEl('rect', { class: 'layout-group', x: group.x, y: group.y, width: group.width, height: group.height, rx: 10 }));
+      var groupLabel = svgEl('text', { class: 'layout-group-label', x: group.x + 16, y: group.y + 25 });
+      groupLabel.textContent = group.label; viewport.appendChild(groupLabel);
+    }
+    (DATA.relationships.contracts || []).forEach(function (edge) {
+      var box = contractPositions[edge.from], target = positions[edge.to];
+      if (!box || !target) return;
+      var contract = contracts.find(function (c) { return c.id === edge.from; });
+      var index = (contract.sections || []).findIndex(function (s) { return s.id === edge.section; });
+      var y = box.y + (index >= 0 && !collapsedContracts[edge.from] ? CONTRACT_HEADER + index * CONTRACT_ROW + CONTRACT_ROW / 2 : CONTRACT_HEADER / 2);
+      var line = svgEl('path', { class: 'edge edge-contract', 'data-mode': 'contract', 'data-from': edge.from, 'data-section': edge.section || '', 'data-to': edge.to, d: routedPath(automatic, routeId('contract', edge.from, edge.to, edge.section), { x: box.x, y: y, width: NODE_W, height: 0 }, target) });
+      var label = svgEl('title'); label.textContent = edge.from + (edge.section ? '#' + edge.section : ' · 全文') + ' → ' + edge.to; line.appendChild(label); viewport.appendChild(line);
+    });
+    contracts.forEach(function (c) { viewport.appendChild(renderContractNode(c, contractPositions[c.id])); });
 
     // Full dependencies: solid. Partial dependencies: dashed, labelled with the
     // named completion point of the composite task they depend on.
@@ -318,19 +436,33 @@ export const VIEWER_JS = String.raw`
         if (dep.mode !== "partial" && !ids[dep.task]) return;
         var from = positions[dep.task], to = positions[task.id];
         if (!from || !to) return;
+        // Use the projected readiness reasons for this specific dependency:
+        // a partial gate can be satisfied while its parent task is still running.
+        var unmet = task.blockedBy.some(function (reason) {
+          return reason.task === dep.task && ((dep.mode !== 'partial' && reason.kind === 'task') ||
+            (dep.mode === 'partial' && reason.kind === 'gate' && reason.gate === dep.gate));
+        });
+        var description = dep.task + (dep.mode === 'partial' ? ':' + dep.gate : '') + ' → ' + task.id +
+          (unmet ? ' · 前置依赖未满足' : ' · 前置依赖已满足');
         var path = svgEl("path", {
-          class: "edge edge-" + (dep.mode === "partial" ? "partial" : "full"),
+          class: "edge edge-" + (dep.mode === "partial" ? "partial" : "full") + (unmet ? ' edge-unmet' : ''),
           "data-mode": dep.mode === "partial" ? "partial" : "full",
           "data-from": dep.task,
           "data-to": task.id,
-          d: edgePath(from, to)
+          'data-satisfied': String(!unmet),
+          'aria-label': description,
+          'marker-end': 'url(#arrow-' + (unmet ? 'unmet' : dep.mode === 'partial' ? 'partial' : 'full') + ')',
+          d: routedPath(automatic, routeId('dependency', dep.task, task.id), from, to)
         });
+        var edgeTitle = svgEl('title'); edgeTitle.textContent = description; path.appendChild(edgeTitle);
         viewport.appendChild(path);
         if (dep.mode === "partial") {
+          var route = automatic && automatic.edges[routeId('dependency', dep.task, task.id)];
+          var labelBox = route && route.label;
           var label = svgEl("text", {
-            class: "edge-label",
-            x: (from.x + to.x + from.width) / 2,
-            y: (from.y + from.height / 2 + to.y + to.height / 2) / 2 - 8
+            class: "edge-label" + (unmet ? ' edge-unmet' : ''),
+            x: labelBox ? labelBox.x : (from.x + to.x + from.width) / 2,
+            y: labelBox ? labelBox.y + 12 : (from.y + from.height / 2 + to.y + to.height / 2) / 2 - 8
           });
           label.textContent = dep.gate || "";
           viewport.appendChild(label);
@@ -349,7 +481,7 @@ export const VIEWER_JS = String.raw`
           "data-mode": "derives",
           "data-from": sourceId,
           "data-to": task.id,
-          d: edgePath(from, to)
+          d: routedPath(automatic, routeId('derives', sourceId, task.id), from, to)
         }));
       });
     });
@@ -360,7 +492,8 @@ export const VIEWER_JS = String.raw`
     visible.filter(function (task) { return task.id !== state.task; }).forEach(function (task) { viewport.appendChild(renderNode(task, positions[task.id])); });
     var selected = visible.find(function (task) { return task.id === state.task; });
     if (selected) viewport.appendChild(renderNode(selected, positions[selected.id]));
-    var boxes = Object.keys(positions).map(function (id) { return positions[id]; }).concat(Object.keys(sourcePositions).map(function (id) { return sourcePositions[id]; }));
+    var boxes = Object.keys(positions).map(function (id) { return positions[id]; }).concat(Object.keys(sourcePositions).map(function (id) { return sourcePositions[id]; }), Object.keys(contractPositions).map(function (id) { return contractPositions[id]; }));
+    if (automatic) boxes.push({ x: 0, y: 0, width: automatic.width, height: automatic.height });
     var bookBox = { x: PAD, y: boxes.length ? Math.max.apply(null, boxes.map(function (b) { return b.y + b.height; })) + GAP_Y : PAD, width: NODE_W, height: 88 };
     viewport.appendChild(renderErrorBookNode(bookBox));
     boxes.push(bookBox);
@@ -384,6 +517,20 @@ export const VIEWER_JS = String.raw`
     summary.textContent = activeFilters().length === 0
       ? "Showing all " + all.length + " task(s)."
       : "Filtering " + activeFilters().join(", ") + " \u2014 " + visible.length + "/" + all.length + " task(s).";
+    var focus = state.task || (state.panel === 'contract' ? (state.document || '').split('#')[0] : null);
+    viewport.querySelectorAll('.edge').forEach(function (edge) {
+      var related = edge.getAttribute('data-from') === focus || edge.getAttribute('data-to') === focus;
+      edge.classList.toggle('related', !!focus && related); edge.classList.toggle('unrelated', !!focus && !related);
+    });
+    if (fitAfterLayout && (automatic || layoutFailures.has(activeLayoutKey))) {
+      fitAfterLayout = false; fit();
+    } else if (automatic && selectionAnchor && selectionAnchor.id === state.task && positions[state.task]) {
+      var selectedBox = positions[state.task];
+      state.x = selectionAnchor.x - (selectedBox.x + selectedBox.width / 2) * state.k;
+      state.y = selectionAnchor.y - (selectedBox.y + selectedBox.height / 2) * state.k;
+      selectionAnchor = null; viewport.setAttribute('transform', transform());
+    }
+    if (automatic) svg.dispatchEvent(new CustomEvent('layoutready'));
   }
 
   function currentErrorBook() {
@@ -500,7 +647,7 @@ export const VIEWER_JS = String.raw`
     });
     group.appendChild(title);
     var meta = svgEl("text", { class: "meta", x: 14 * s, y: metrics.metaY, style: 'font-size:' + 11 * s + 'px' });
-    var planLabel = { skeleton: '骨架', awaiting_review: '待主控细化', refined: '已细化', stale: '需重新细化' };
+    var planLabel = { skeleton: '骨架', awaiting_review: '待主控细化', refined: '已细化' };
     meta.textContent = (task.status === 'blocked' ? '受阻：' + ((task.manualBlockers || [])[0] || '查看阻塞原因').slice(0, 16) : planLabel[task.planningState] || (task.readiness === 'unready' ? '前置条件未满足' : '依赖已满足')) + ' · ' + task.dependsOn.length + ' 个依赖';
     group.appendChild(meta);
     if (task.claim) {
@@ -532,11 +679,52 @@ export const VIEWER_JS = String.raw`
     return text.length > max ? text.slice(0, max - 1) + "\u2026" : text;
   }
 
+  function renderContractNode(contract, position) {
+    var group = svgEl('g', { class: 'node contract', transform: 'translate(' + position.x + ',' + position.y + ')', 'data-kind': 'contract', 'data-contract': contract.id, role: 'button', tabindex: 0, 'aria-label': '契约 ' + contract.title });
+    var height = position.height - 12, sections = contract.sections || [];
+    [10, 5].forEach(function (shift) { group.appendChild(svgEl('rect', { class: 'contract-sheet', x: shift, y: shift, width: NODE_W, height: height, rx: 8 })); });
+    group.appendChild(svgEl('rect', { class: 'node-body', width: NODE_W, height: height, rx: 8 }));
+    var title = svgEl('text', { x: 14, y: 25 }); title.textContent = contract.id + ' · 契约'; group.appendChild(title);
+    var name = svgEl('text', { x: 14, y: 47 }); name.textContent = clip(contract.title, 22); group.appendChild(name);
+    var meta = svgEl('text', { x: 14, y: 65, class: 'node-meta' }); meta.textContent = sections.length ? sections.length + ' 个章节 · 点击标题查看全文' : '点击查看全文'; group.appendChild(meta);
+    group.appendChild(svgEl('circle', { class: 'contract-port', cx: NODE_W, cy: CONTRACT_HEADER / 2, r: 4 }));
+    if (sections.length) {
+      var toggle = svgEl('g', { 'data-contract-toggle': contract.id, role: 'button', tabindex: 0, 'aria-label': collapsedContracts[contract.id] ? '展开章节' : '收起章节', 'aria-expanded': String(!collapsedContracts[contract.id]) });
+      toggle.appendChild(svgEl('rect', { x: NODE_W - 34, y: 8, width: 26, height: 24, rx: 4, class: 'contract-toggle' }));
+      var icon = svgEl('text', { x: NODE_W - 27, y: 25 }); icon.textContent = collapsedContracts[contract.id] ? '+' : '−'; toggle.appendChild(icon); group.appendChild(toggle);
+    }
+    if (!collapsedContracts[contract.id]) sections.forEach(function (section, index) {
+      var selected = state.panel === 'contract' && state.document === contract.id + '#' + section.id;
+      var row = svgEl('g', { class: 'contract-section' + (selected ? ' selected' : ''), transform: 'translate(0,' + (CONTRACT_HEADER + index * CONTRACT_ROW) + ')', 'data-section': section.id, role: 'button', tabindex: 0, 'aria-label': section.title });
+      row.appendChild(svgEl('rect', { width: NODE_W, height: CONTRACT_ROW, class: 'contract-row' }));
+      var label = svgEl('text', { x: 14, y: 24 }); label.textContent = clip(section.title, 22); row.appendChild(label);
+      var hint = svgEl('title'); hint.textContent = contract.id + '#' + section.id; row.appendChild(hint);
+      row.appendChild(svgEl('circle', { class: 'contract-port', cx: NODE_W, cy: CONTRACT_ROW / 2, r: 4 })); group.appendChild(row);
+    });
+    return group;
+  }
+  function renderCodeEntries(entries) {
+    return '<h3>代码入口</h3>' + (entries.length ? '<ul>' + entries.map(function (r) {
+      return '<li><strong>' + esc(r.id + ' · ' + r.symbol) + '</strong><br><code>' + esc(r.path + ':' + r.line) + '</code><p>' + esc(r.summary) + '</p></li>';
+    }).join('') + '</ul>' : '<p class="muted">无登记入口。</p>');
+  }
   function renderDetails() {
     var body = document.getElementById("details-body");
+    if (state.panel === 'contract') {
+      var address = (state.document || '').split('#');
+      var contract = (DATA.contracts || []).find(function (c) { return c.id === address[0]; });
+      if (contract) {
+        var section = (contract.sections || []).find(function (s) { return s.id === address[1]; });
+        body.innerHTML = '<h3>' + esc(contract.id + ' · ' + contract.title) + '</h3><p class="muted">' + esc(section ? '章节：' + section.title : '当前契约 · 全文') + '</p>' +
+          '<small>' + esc(contract.file + (section ? '#' + section.id : '')) + '</small>' + (contract.document.error ? '<p>' + esc(contract.document.error) + '</p>' : section ? section.html : contract.document.html || '') +
+          renderCodeEntries((DATA.references || []).filter(function (r) { return contract.references.indexOf(r.id) >= 0; }));
+        return;
+      }
+    }
     if (state.panel === 'error-book') { renderErrorBook(body); return; }
     var task = state.task ? tasksById[state.task] : null;
     if (!task) { body.innerHTML = githubBadge(graphsById[state.graph]) + '<p class="muted">Select a task node.</p>'; return; }
+    if (state.panel === 'codeReferences') { body.innerHTML = panelNav(task) + renderCodeEntries(task.codeReferences || []); return; }
     if (state.panel !== 'overview') { renderDocumentPanel(task, body); return; }
     var blockers = task.blockedBy.map(function (reason) {
       if (reason.kind === "manual") return "manual: " + reason.text;
@@ -634,6 +822,7 @@ export const VIEWER_JS = String.raw`
   }
 
   function selectGraph(graphId, taskId) {
+    selectionAnchor = null; layoutSelection = null; fitAfterLayout = true;
     if (!graphsById[graphId]) {
       state.graph = graphId;
       state.task = null;
@@ -647,29 +836,49 @@ export const VIEWER_JS = String.raw`
     renderNav(); renderBreadcrumbs(); renderGraph(); renderDetails(); writeHash();
   }
   function selectTask(taskId) {
+    captureSelectionAnchor(taskId); fitAfterLayout = false;
     state.task = taskId;
     state.panel = 'overview'; state.document = null;
     renderGraph(); renderDetails(); writeHash();
   }
   function selectPanel(taskId, panel) {
+    captureSelectionAnchor(taskId); fitAfterLayout = false;
     if (collapseTimer) clearTimeout(collapseTimer);
     lastNodeClick = { id: null, at: 0 };
     state.task = taskId; state.panel = panel; state.document = null;
     renderGraph(); renderDetails(); writeHash();
   }
+  function captureSelectionAnchor(taskId) {
+    selectionAnchor = null;
+    var node = Array.from(document.querySelectorAll('.node[data-task]')).find(function (n) { return n.getAttribute('data-task') === taskId; });
+    if (!node) return;
+    var match = /translate\(([-\d.]+),([-\d.]+)\)/.exec(node.getAttribute('transform') || '');
+    var body = node.querySelector('.node-body');
+    if (match && body) selectionAnchor = { id: taskId,
+      x: state.x + (Number(match[1]) + Number(body.getAttribute('width')) / 2) * state.k,
+      y: state.y + (Number(match[2]) + Number(body.getAttribute('height')) / 2) * state.k };
+  }
   function writeHash() {
+    if (readingHash) return;
     var hash = "#graph=" + encodeURIComponent(state.graph || "") +
       (state.task ? "&task=" + encodeURIComponent(state.task) : "") +
-      ((state.task && state.panel !== 'overview') || state.panel === 'error-book' ? '&panel=' + encodeURIComponent(state.panel) : '') +
-      (state.task && state.document ? '&document=' + encodeURIComponent(state.document) : '');
+      ((state.task && state.panel !== 'overview') || state.panel === 'error-book' || state.panel === 'contract' ? '&panel=' + encodeURIComponent(state.panel) : '') +
+      ((state.task || state.panel === 'contract') && state.document ? '&document=' + encodeURIComponent(state.document) : '');
     if (window.location.hash === hash) return;
     try {
       window.history.replaceState(null, "", hash);
     } catch (error) {
+      var url = new URL(hash, window.location.href).href;
+      ownHashChanges.set(url, (ownHashChanges.get(url) || 0) + 1);
       window.location.hash = hash;
     }
   }
   function readHash() {
+    // Restore graph, task and document together. On file://, replaceState can
+    // fall back to hash assignment; writing intermediate states would enqueue
+    // alternating hashchange events forever (overview -> contract -> overview).
+    readingHash = true;
+    try {
     var raw = window.location.hash.replace(/^#/, "");
     var params = {};
     raw.split("&").forEach(function (pair) {
@@ -681,36 +890,56 @@ export const VIEWER_JS = String.raw`
     var graphId = params.graph || (entry ? entry.id : null);
     if (!graphId) { renderGraph(); return; }
     selectGraph(graphId, params.task || null);
+    if (params.panel === 'contract' && (DATA.contracts || []).some(function (c) { var parts = (params.document || '').split('#'); return c.id === parts[0] && (!parts[1] || (c.sections || []).some(function (s) { return s.id === parts[1]; })); })) { state.task = null; state.panel = 'contract'; state.document = params.document; renderGraph(); renderDetails(); writeHash(); return; }
     if (params.panel === 'error-book' && graphsById[state.graph]) { state.task = null; state.panel = 'error-book'; renderGraph(); renderDetails(); writeHash(); return; }
     if (state.task && PANEL_LABELS[params.panel]) {
       state.panel = params.panel; state.document = params.document || null;
       renderGraph(); renderDetails(); writeHash();
     }
+    } finally { readingHash = false; writeHash(); }
   }
 
   function fit() {
     var svg = document.getElementById("graph");
     var box = graphBounds;
     var width = svg.clientWidth || 800, height = svg.clientHeight || 600;
-    var scale = Math.min(1.4, Math.max(0.2, Math.min(
+    var scale = Math.min(1.4, Math.max(0.005, Math.min(
       (width - 2 * PAD) / Math.max(box.width, 1),
       (height - 2 * PAD) / Math.max(box.height, 1)
     )));
     state.k = scale;
-    state.x = PAD - box.x * scale;
-    state.y = PAD - box.y * scale;
-    renderGraph();
+    state.x = (width - box.width * scale) / 2 - box.x * scale;
+    state.y = (height - box.height * scale) / 2 - box.y * scale;
+    var viewport = document.getElementById('viewport');
+    if (viewport) viewport.setAttribute('transform', transform());
   }
   function zoom(factor) {
-    state.k = Math.min(3, Math.max(0.15, state.k * factor));
-    renderGraph();
+    fitAfterLayout = false; selectionAnchor = null;
+    var svg = document.getElementById('graph'), old = state.k;
+    state.k = Math.min(3, Math.max(0.005, state.k * factor));
+    var x = (svg.clientWidth || 800) / 2, y = (svg.clientHeight || 600) / 2;
+    state.x = x - (x - state.x) * state.k / old; state.y = y - (y - state.y) * state.k / old;
+    var viewport = document.getElementById('viewport');
+    if (viewport) viewport.setAttribute('transform', transform());
   }
   document.querySelectorAll("#viewport-controls button").forEach(function (button) {
     button.addEventListener("click", function () {
       var action = button.getAttribute("data-view");
-      if (action === "fit") fit();
+      if (action === "fit") {
+        selectionAnchor = null;
+        fitAfterLayout = document.getElementById('graph').getAttribute('data-layout-state') === 'pending';
+        fit();
+      }
       else zoom(action === "zoom-in" ? 1.2 : 1 / 1.2);
     });
+  });
+  document.getElementById('layout-direction').addEventListener('change', function (event) {
+    layoutDirection = event.target.value === 'DOWN' ? 'DOWN' : 'RIGHT';
+    selectionAnchor = null; fitAfterLayout = true; renderGraph();
+  });
+  document.getElementById('show-contracts').addEventListener('change', function (event) {
+    showContracts = event.target.checked;
+    selectionAnchor = null; fitAfterLayout = true; renderGraph();
   });
   document.getElementById("claim-filter").addEventListener("input", function (event) {
     state.filters.claim = event.target.value.trim();
@@ -743,6 +972,13 @@ export const VIEWER_JS = String.raw`
   });
   function activateCanvasTarget(target, keyboard) {
     if (!target || typeof target.closest !== 'function') return;
+    var contractNode = target.closest('[data-kind="contract"]');
+    if (contractNode) {
+      var contractId = contractNode.getAttribute('data-contract');
+      if (target.closest('[data-contract-toggle]')) { collapsedContracts[contractId] = !collapsedContracts[contractId]; renderGraph(); return; }
+      var sectionNode = target.closest('.contract-section');
+      if (collapseTimer) clearTimeout(collapseTimer); state.task = null; state.panel = 'contract'; state.document = contractId + (sectionNode ? '#' + sectionNode.getAttribute('data-section') : ''); renderGraph(); renderDetails(); writeHash(); return;
+    }
     if (target.closest('[data-kind="error-book"]')) {
       if (collapseTimer) clearTimeout(collapseTimer);
       state.task = null; state.panel = 'error-book'; state.document = null;
@@ -790,6 +1026,7 @@ export const VIEWER_JS = String.raw`
   var dragging = null;
   svg.addEventListener("mousedown", function (event) {
     if (event.button !== 0 || event.target.closest('.node')) return;
+    fitAfterLayout = false; selectionAnchor = null;
     dragging = { x: event.clientX, y: event.clientY, ox: state.x, oy: state.y };
     svg.classList.add("dragging");
   });
@@ -805,7 +1042,16 @@ export const VIEWER_JS = String.raw`
     if (dragging && dragging.moved) suppressClickUntil = Date.now() + 150;
     dragging = null; svg.classList.remove("dragging");
   });
-  window.addEventListener("hashchange", readHash);
+  window.addEventListener("hashchange", function (event) {
+    // file:// history fallbacks emit an event for state we already rendered.
+    // Re-reading our own selection would reset its zoom and trigger another fit.
+    var count = ownHashChanges.get(event.newURL) || 0;
+    if (count) {
+      if (count === 1) ownHashChanges.delete(event.newURL); else ownHashChanges.set(event.newURL, count - 1);
+      return;
+    }
+    readHash();
+  });
 
   document.getElementById("project-name").textContent = DATA.project.name;
   renderFilters();

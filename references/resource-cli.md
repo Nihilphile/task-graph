@@ -43,7 +43,13 @@ CLI 'graph[G-001].task[T-0012]' start --help --json
 | `graph[G-001].task[T-0012]` | show、revise、refine、unrefine、start、complete、reject、cancel、reopen、claim、release、reassign、link、unlink、block、unblock、attach-subgraph、set-completion、expose-gate、describe |
 | `…task[T-0012].content` | list、attach、remove、describe |
 | `…task[T-0012].review-requirement` | list、attach、remove、describe |
-| `…task[T-0012].reference` / `.report` | list、attach、describe |
+| `…task[T-0012].reference` | add、attach、remove、list、describe（代码条目） |
+| `…task[T-0012].contract` | attach、remove、list、describe |
+| `contract` / `contract[C-0001]` | add/list；show/update/describe |
+| `contract[C-0001].reference` | add、attach、remove、list、describe |
+| `reference` / `reference[R-0001]` | add/list；show/update/describe |
+| `decision` | record、describe |
+| `…task[T-0012].report` | list、attach、describe |
 | `…task[T-0012].log` | list、add、attach、describe |
 | `…task[T-0012].handoff` | list、attach、create、describe |
 | `…task[T-0012].output` | list、add、remove、set-audience、describe |
@@ -57,61 +63,15 @@ CLI 'graph[G-001].task[T-0012]' start --help --json
 
 表中的省略号代表完整图地址。附件集合当前按文件路径绑定、移除，通过 list 返回的 `read_path` 读取；未引入 `.report[序号]`。`task list` 保留为跨图查询，`task add --from` 保留为跨图批量创建入口。`source add`、`github sync`、`skill validate` 保持原语法，也支持对应集合的 describe。
 
-## 创建、细化与执行
+## 按动作查操作手册
 
-```text
-CLI 'graph[G-001].task' add --summary "实现存档" --content docs/tasks/goal.md --planning dynamic --depends-on T-0010 --depends-on T-0011 --cwd "<项目>" --json
-CLI 'graph[G-001].task' list --needs-refinement --cwd "<项目>" --json
-CLI 'graph[G-001].task[T-0012].content' attach --path docs/tasks/details.md --summary "接口与验收入口" --cwd "<项目>" --json
-CLI 'graph[G-001].task[T-0012]' refine --reason "要求与前置接口已核实" --cwd "<项目>" --json
-CLI 'graph[G-001].task[T-0012]' start --role worker --session-id ACTUAL_SESSION --cwd "<项目>" --json
-CLI 'graph[G-001].task[T-0012].log' add "已确认上下文，开始施工" --cwd "<项目>" --json
-```
-
-例中的 ID 换成实际返回值。新地址命令返回的任务对象包含 `resource`，可直接传给下一次调用；项目入口使用 `graph list` 发现图。`start/show` 保留 context，task-take 指引由 start/reopen 或 show --detail 返回。动态任务、快照、领取和验收的语义与旧命令相同。
-
-图内批量创建：
-
-```text
-CLI 'graph[G-001].task' add --from "<计划JSON绝对路径>" --cwd "<项目>" --json
-```
-
-该集合中的任务必须属于 G-001；计划中指向其他图或使用 parent_task 时整批拒绝。跨图计划、包含父子拆分的计划使用 `CLI task add --from ...`，按原计划字段表达归属。已有子图的集合 `graph[G-001].task[T-0012].subgraph.task add` 可以在子图中创建任务，但不会自动把新任务加入父任务的 `completion_requires`。单个子任务使用 `CLI task add --parent-task T-0012 ...` 会创建或复用子图，并默认把新任务加入父任务完成目标；从返回值取得新任务所在图，再用完整地址操作。已有任务的 `.subgraph show` 返回子图地址。
-
-`--from` 路径按调用目录解析，建议用绝对路径；content、附件路径按项目根目录解析。依赖数组、@key 与稳定 key 的重试规则见 [主控接口参考](controller-workflow.md)。
-
-## 依赖与材料
-
-```text
-CLI 'graph[G-001].task[T-0012].dependency' list --cwd "<项目>" --json
-CLI 'graph[G-001].task[T-0012].dependency' add T-0011 --cwd "<项目>" --json
-CLI 'graph[G-001].task[T-0012].dependency' remove T-0011 --cwd "<项目>" --json
-CLI 'graph[G-001].task[T-0012].reference' list --cwd "<项目>" --json
-CLI 'graph[G-001].task[T-0012].reference' attach --path docs/reference/api.md --summary "实际接口与调用示例" --cwd "<项目>" --json
-CLI 'graph[G-001].task[T-0012].report' attach --path docs/reports/test.md --summary "验证结果" --cwd "<项目>" --json
-```
-
-已有依赖每次 add/remove 一条，创建任务可重复 `--depends-on`。依赖参数接受项目内唯一 task ID，也接受完整地址 `graph[G-002].task[T-0018]`；完整地址会额外校验图归属。跨图仍受原有图边界、完成点和循环校验约束。创建时可附 `:gate`，依赖编辑也可用 `--gate`。
-
-附件 list 复用 agent context 的过滤和来源规则：reference/report 可包括直接依赖的材料，默认以 `source_task` 标明依赖来源，`--detail` 增加 `scope`、`source_resource` 等元数据；content 是本任务的全部要求。响应保留 summary、live/snapshot、read_path 和 project_root，默认没有正文，不截断文件数量。完整字段规则见 [CLI 输出约定](cli-output.md)。user 附件与旧版未审核聚合交接保持排除；HTML 中仍可供人阅读。按需展开正文使用任务 show 的 `--expand-path`、`--expand`、`--preview`。
-
-## 通知
-
-```text
-CLI 'graph[G-001].watch' add --thread UUID --cwd "<项目>" --json
-CLI 'graph[G-001].watch' status --cwd "<项目>" --json
-CLI 'graph[G-001].watch' flush --cwd "<项目>" --json
-CLI 'graph[G-001].watch' remove --thread UUID --cwd "<项目>" --json
-CLI 'graph[G-001].watch' retry EVENT_ID --allow-duplicate --cwd "<项目>" --json
-```
-
-add 需要主控显式注册实际 Desktop UUID；status 只读。恢复投递和不确定结果的限制见 [动态工作流参考](dynamic-workflow.md)。
+- 创建/批量计划：[创建计划](operations/planning.md)。
+- 父子与依赖：[子图和完成点](operations/relationships.md)。
+- 开始/领取/受阻：[执行操作](operations/execution.md)。
+- 材料绑定：[附件](operations/attachments.md)；读取结果：[上下文](operations/context.md)。
+- 提交交付：[交付](operations/delivery.md)；审查配置：[审查控制](operations/review-control.md)。
+- Desktop 通知：[订阅](operations/watch.md)。
 
 ## 兼容
 
-旧命令如 `task show T-0012`、`task report attach T-0012` 继续支持，原 JSON 形状保留。新地址作为入口路由到同一语义处理，不迁移任务数据、不改变完成条件。后续 skill 示例优先使用资源地址；历史报告中的旧命令仍然可执行。
-
-
-## 独立审查
-
-审查资源沿用完整图地址或 `task[T-0012]` 简写；RR 支持多份，图 `.auto-review enable` 只扫描一次。自动提交及已完成任务的手动 `.review start` 都先进入 `pending_review`，确认审查线程启动后转为 `reviewing`。启动条件、审查者交卷和异常恢复见 [独立审查](review.md)。
+旧命令如 task show T-0012、task report attach T-0012 继续支持，并与资源地址使用相同处理逻辑。当前默认输出契约见 [CLI 输出](cli-output.md)，需扩展元数据时加 --detail。完整旧命令目录供维护者按需查询：[commands.md](commands.md)。

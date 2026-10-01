@@ -10,7 +10,7 @@ export function taskRefineCommands(): CommandSpec[] {
   return ['refine', 'unrefine'].map(action => ({
     name: `task ${action}`, summary: action === 'refine' ? 'Record controller assessment and make a dynamic task executable' : 'Return an unclaimed task to dynamic planning',
     usage: `task-graph task ${action} T-NNNN --reason <assessment> [--actor <controller>] [--cwd <dir>] [--json]`,
-    details: ['Refine after checking all current requirements, acceptance criteria and upstream capabilities. This records input fingerprints, not semantic proof.', 'Dependencies completing never refine a task automatically. Requirements or upstream reference changes require another assessment.'],
+    details: ['Record controller approval after checking requirements and upstream capabilities. Input fingerprint checks are suspended.', 'Approval persists until unrefine; dependencies are still checked before execution.'],
     run(ctx, args) {
       const id = args.positionals[0], reason = args.opt('reason');
       if (!id || !reason) throw usageError('Pass task ID and --reason');

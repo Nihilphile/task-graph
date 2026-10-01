@@ -88,7 +88,7 @@ export async function main(argv: readonly string[], options: MainOptions = {}): 
       io.out(renderCommandHelp(command));
       return EXIT_OK;
     }
-    const readOnly = ['help', 'validate', 'skill validate', 'task list', 'task show', 'task review status', 'task auto-review status', 'graph auto-review status'].includes(command.name);
+    const readOnly = /^(contract|reference|task contract|task reference|contract reference) (list|show)$/.test(command.name) || ['help', 'validate', 'skill validate', 'task list', 'task show', 'task review status', 'task auto-review status', 'graph auto-review status'].includes(command.name);
     if (readOnly) return await command.run(ctx, args);
     if (command.name === 'graph watch' || command.name === 'graph unwatch') return await command.run(ctx, args);
     const output: string[] = [];

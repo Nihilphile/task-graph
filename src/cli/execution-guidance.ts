@@ -11,7 +11,7 @@ export function executionGuidance() {
   return {
     skill: 'task-take',
     skill_path: skillPath,
-    message: '请阅读 task-take skill；动态任务须先由主控 refine。读取全部 context.contents、context.review_requirements 和必要 reference，写接手工作记录后直接施工，无须主控二次许可。缺口记入日志，无法继续时标记阻塞；完工前登记后继所需 reference。启用自动审查时 complete 返回 pending_review 表示已交付，独立审查者负责后续结论；不要重复 complete。普通验收任务提交明确 pass/reject 及报告。',
+    message: '请阅读 task-take 入口，使用本次 context 恢复任务要求和必要参考，按入口约定自主执行并交付。',
   };
 }
 

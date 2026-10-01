@@ -1,4 +1,5 @@
 import { reviewView } from './review-state.js';
+import { contractSections, groupedContracts, type ContractSection } from './contract-sections.js';
 import path from 'node:path';
 import { errorBookEntries, type ErrorBookEntry } from './error-book.js';
 import { projectPaths } from './layout.js';
@@ -9,6 +10,9 @@ import type { TaskClaim, TaskOutput, TaskSubgraph, TaskDependency } from './task
 import { taskDocuments, type TaskDocuments } from './documents.js';
 import type { TaskDocument, TaskHistoryEntry } from './task.js';
 import { referenceDocuments } from './task-context.js';
+import { knowledgeContext } from './task-context.js';
+import { readKnowledge, type ContractNode, type CodeReference } from './knowledge-store.js';
+import { documentView, renderDocumentMarkdown, type DocumentView } from './documents.js';
 import { githubTargets, planGitHub } from './github-plan.js';
 import { githubView, readGitHubState, type GitHubView, type GitHubState } from './github-state.js';
 
@@ -25,6 +29,8 @@ export interface ProjectedGraph {
 }
 
 export interface ProjectedTask {
+  readonly contracts?: readonly string[];
+  readonly codeReferences?: readonly CodeReference[];
   readonly github?: GitHubView;
   readonly id: string;
   readonly graph: string;
@@ -52,12 +58,15 @@ export interface ProjectedTask {
 }
 
 export interface ProjectedEdge {
+  readonly section?: string;
   readonly from: string;
   readonly to: string;
   readonly gate?: string;
 }
 
 export interface GraphProjection {
+  readonly references?: readonly CodeReference[];
+  readonly contracts?: readonly (ContractNode & { document: DocumentView; sections: readonly (ContractSection & { html: string })[] })[];
   readonly errorBook?: readonly ErrorBookEntry[];
   readonly version: number;
   readonly project: {
@@ -69,6 +78,7 @@ export interface GraphProjection {
   readonly sources: readonly { id: string; file: string; confirmedAt: string }[];
   readonly tasks: readonly ProjectedTask[];
   readonly relationships: {
+    readonly contracts?: readonly ProjectedEdge[];
     readonly full: readonly ProjectedEdge[];
     readonly partial: readonly ProjectedEdge[];
     readonly derives: readonly ProjectedEdge[];
@@ -85,6 +95,7 @@ export interface GraphProjection {
 export function createGraphProjection(root: string): GraphProjection {
   const repository = loadTaskRepository(root);
   const manifest = repository.manifest;
+  const knowledge = readKnowledge(root);
   const entryIds = new Set(manifest.entryGraphs);
   const targets = githubTargets(repository);
   let githubState: GitHubState | undefined;
@@ -126,8 +137,11 @@ export function createGraphProjection(root: string): GraphProjection {
     id: task.id,
     graph: task.graph,
     title: task.title,
+    ...(task.contracts?.length ? { contracts: task.contracts } : {}),
+    codeReferences: knowledgeContext(root, task, repository).code_references,
     ...remoteView(task.graph, task.id),
-    documents: { ...taskDocuments(root, task), references: referenceDocuments(root, task, repository) },
+    documents: { ...taskDocuments(root, task), references: referenceDocuments(root, task, repository),
+      contracts: knowledgeContext(root, task, repository).contracts.map(c => ({ ...documentView(root, 'contract', { path: c.path, title: c.title }, c.sections), id: c.id! })) },
     history: task.history,
     review: reviewView(root, task.id),
     status: task.status,
@@ -179,6 +193,11 @@ export function createGraphProjection(root: string): GraphProjection {
 
   return {
     version: PROJECTION_VERSION,
+    ...(knowledge.references.length ? { references: knowledge.references } : {}),
+    ...(knowledge.contracts.length ? { contracts: knowledge.contracts.map(c => {
+      const document = documentView(root, 'contract', { path: c.file, title: c.title });
+      return { ...c, document, sections: contractSections(document.body ?? '').map(s => ({ ...s, html: renderDocumentMarkdown(root, c.file, s.body) })) };
+    }) } : {}),
     errorBook: errorBookEntries(repository, undefined, true),
     project: {
       name: manifest.name,
@@ -193,6 +212,7 @@ export function createGraphProjection(root: string): GraphProjection {
     })),
     tasks,
     relationships: {
+      ...(knowledge.contracts.length ? { contracts: tasks.flatMap(t => [...groupedContracts(t.contracts)].flatMap(([id, sections]) => sections ? sections.map(section => ({ from: id, to: t.id, section })) : [{ from: id, to: t.id }])) } : {}),
       full: sortEdges(full),
       partial: sortEdges(partial),
       derives: sortEdges(derives),

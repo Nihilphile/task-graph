@@ -15,6 +15,48 @@ function runner(root: string) {
   };
 }
 
+test('observed rework can be recorded during execution and after completion without changing status or claims', async t => {
+  const w = useTempWorkspace(t, 'error-book-incident');
+  initializeProject(w.root, { name: 'Rework', task: 'Implement' });
+  const run = runner(w.root);
+  await run('task[T-0001]', 'start', '--role', 'worker', '--session-id', 'worker');
+  const before = loadTaskRepository(w.root).taskById('T-0001')!;
+  w.write('incident.md', '# Missed input change\nOld contract caused rework in T-0001@2.');
+  const first = await run('task[T-0001]', 'record-error', '--error-report', 'incident.md');
+  assert.equal(first.code, 0);
+  const current = loadTaskRepository(w.root).taskById('T-0001')!;
+  assert.equal(current.status, before.status);
+  assert.deepEqual(current.claim, before.claim);
+  assert.deepEqual(current.outputs, before.outputs);
+  assert.match(w.read(first.entry.read_path), /Old contract/);
+  assert.equal((await run('task[T-0001]', 'complete')).code, 0);
+  w.write('incident.md', '# Second incident\nA later change required another repair.');
+  assert.equal((await run('task[T-0001]', 'record-error', '--error-report', 'incident.md')).code, 0);
+  assert.equal((await run('task[T-0001]', 'show')).task.status, 'done');
+  assert.equal((await run('.', 'build')).code, 0);
+  const entries = (await run('graph[G-001].errorbook', 'show')).entries;
+  assert.equal(entries.length, 2);
+  assert.match(entries[0].report.body, /Old contract/);
+  assert.match(entries[1].report.body, /Second incident/);
+  const page = await openViewer(w.file('.task-graph/generated/index.html'), { hash: '#graph=G-001&panel=error-book' });
+  t.after(() => page.close());
+  assert.match(page.document.getElementById('details-body')!.textContent!, /Missed input change/);
+  assert.deepEqual(page.errors, []);
+});
+
+test('invalid incident reports leave tasks and snapshots unchanged', async t => {
+  const w = useTempWorkspace(t, 'error-book-incident-invalid');
+  initializeProject(w.root, { name: 'Rework', task: 'Implement' });
+  const run = runner(w.root);
+  w.write('empty.md', '  \n'); w.write('wrong.txt', 'Incident');
+  const before = w.listFiles().map(f => [f, w.read(f)]);
+  for (const file of ['empty.md', 'wrong.txt', 'missing.md', '../escape.md']) {
+    assert.notEqual((await run('task[T-0001]', 'record-error', '--error-report', file)).code, 0);
+  }
+  assert.deepEqual(w.listFiles().map(f => [f, w.read(f)]), before);
+  assert.equal((await run('errorbook', 'list')).entries.length, 0);
+});
+
 test('error-book appends each rejection atomically, preserves snapshots after retest and rebuild, and scopes descendants', async t => {
   const w = useTempWorkspace(t, 'error-book');
   initializeProject(w.root, { name: 'Errors', task: 'Parent' });

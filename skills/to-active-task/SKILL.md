@@ -1,128 +1,26 @@
 ---
 name: to-active-task
 description: >-
-  帮助主控根据当前认知组织工作：信息充足时推进，信息模糊时探索，随着实际交付调整任务图。
-  提供 task-graph 的动态规划、上下文交付与验收方法，适用于方向和细节需要逐步明确的工作。
-  与一次性详细规划的 to-task 二选一；执行者接取任务使用 task-take。
+  主控动态规划 task-graph：保留远期骨架，按当前信息细化近期任务，
+  随交付调整划分与顺序。与一次性详细规划的 to-task 二选一。
 ---
 
 # To Active Task
 
-## 思想：让计划随着认知演进
+通过 junction/symlink 安装时，按真实文件位置解析以下链接。
 
-> 信息充足后下决断，信息模糊时摸方向。根据行动得到的新信息，持续修正判断和计划。
+先读[动态规划思想](../../references/workflows/dynamic-planning.md)，判断任务粒度、并行条件和放行依据。一次性详细规划使用 [to-task](../to-task/SKILL.md)。
 
-作为主控，你需要判断当前什么工作最值得推进、哪些未知值得探索，以及新的事实如何影响已有安排。任务图把这些判断保存下来，方便执行者接手、人类审阅，以及下一位主控继续思考。
-
-### 详细到当前认知支持的程度
-
-“信息充足”是足以支持下一步行动。能够说明要解决什么、依据是什么、怎样判断结果，就可以考虑推进；正常的代码探索可以在施工中完成。行动范围越大、试错代价越高，作出决定前越需要可靠依据。
-
-远期工作可以只保留目标、已知约束和待明确的输入；临近执行的工作需要让空白上下文的执行者找到施工与验证所需信息。计划的细度由认知决定，可以在同一张图中并存。
-
-已知有一项交付，但实现细节未定，可以先建任务骨架。连任务边界都暂时说不清的区域，可以先记在总任务的待展开事项里，等获得依据后再拆。骨架的价值在于表达当前理解，保持对未知的诚实。
-
-### 探索也是推进目标的方式
-
-阅读代码、查资料、做原型、与人讨论、实现一个小切片，都可能减少不确定性。选择哪一种，取决于它能回答什么问题、成本如何，以及答案会影响什么工作。
-
-探索可以由主控顺手完成，也可以交给执行者，或成为单独的任务。值得独立跟踪、委派或被其他工作等待时，单独建任务会更有帮助。任务类型和拆分粒度由实际需要决定。
-
-需要人类作出的取舍，通过真实讨论取得决定；主控可以提供证据、选项和建议。已有授权内的工作继续推进。
-
-### 用事实修正计划
-
-最初的拆分、顺序和接口设想都可能带有假设。前置交付、探索结论或验收结果出现后，重新看它们是否仍然成立：后续任务可能变得清楚，也可能需要补充工作、调整边界，或已经没有必要。
-
-依赖完成意味着一个输入发生了变化，是否足以开工仍需判断。反过来，新的信息也可能让一条旧依赖失去必要性。把改变判断的依据和对已有工作的影响留下来，正在执行的工作需要协调后再调整。
-
-目标和已确认的验收约定为这些调整提供方向。发现实际结果与预期不同，先弄清偏差；范围或标准的变化应有明确依据，涉及用户取舍时回到讨论。
-
-### 把认知交给下一位参与者
-
-任务要求承载当前要做的事和已确认约定；reference 承载实际实现、接口入口和可复用结论；report 承载验证证据；工作记录保留进展与缺口。
-
-这些材料帮助主控依据真实交付继续判断，也让执行者通过任务入口恢复所需上下文。重要结论写清楚，长材料给准确地址和读取用途。一个决定有权威出处，其他位置保留摘要和链接，便于更新。
-
-## 方法：按需要组合 task-graph 的能力
-
-下面按用途介绍工具。可以从已有任务、一个待澄清的问题、一次交付或一份报告开始，选择当前有帮助的操作。
-
-### 工具入口与查询
-
-本 Skill 随 task-graph 分发；若通过 junction 安装，先解析实际目标路径，再从 `skills/to-active-task` 向上两级定位工具根目录，CLI 为 `dist/src/cli.js`。首次准备环境时读 [task-graph 指南](../../SKILL.md)。下文 `CLI` 代表 `node "<实际CLI路径>"`，每次调用带目标项目的 `--cwd "<项目根目录>"`，自动化调用加 `--json`。
-
-用 `CLI . describe` 发现工具入口，`CLI graph list` 查图，`CLI 'graph[<图ID>].task[<ID>]' describe` 查看对象支持的操作、用法和当前状态。地址中的 ID 换成实际返回值；规则见 [资源地址 CLI](../../references/resource-cli.md)。可用这些查询恢复当前判断：
-
-- `task list`：当前有哪些工作，状态和阻塞是什么。
-- `task list --needs-refinement`：哪些未领取的待办/拒绝任务已无其他阻塞，适合主控重新评估。
-- `task list --available`：哪些待办已满足工具的开工条件；其中可能包含负责统筹的父任务。
-- `'graph[<图ID>].task[<ID>]' show --manifest`：任务事实、当前要求和参考资料的地址清单。
-
-`context.contents` 列出全部当前要求，`context.review_requirements` 列出独立验收要求，`context.references` 保留参考的摘要和来源。`read_path` 相对 `context.project_root`，固定版本指向快照。可根据问题选择要读的文件，遵守用途排除和项目交接约定（默认 excluded_count，--detail 查看排除原因）；需要 CLI 展开正文时可用 `--expand-path <路径>`，体量预览用 `--preview`。
-
-### 用节点和关系表达当前理解
-
-没有任务图的项目可以用 `. init --name "<项目名>"` 初始化；独立交付可用 `graph add --entry --title "<目标>"` 建图，已有图可以继续扩展。图与任务 ID 使用实际返回值。
-
-一个骨架可以只绑定目标文件：
-
-```text
-CLI 'graph[<图ID>].task' add --summary "<要交付的行为或要回答的问题>" --planning dynamic --content docs/tasks/goal.md --cwd "<项目根目录>" --json
-```
-
-目标文件先写到目前能确定的程度，保留已知约束、预期结果和未明确的输入，再绑定任务。动态任务逐个指定 `--planning dynamic`；子任务不会自动继承该字段。content 和附件路径相对项目根目录。
-
-`CLI task add --parent-task <父任务ID> --summary "<工作>" --content <要求文件> --cwd "<项目根目录>" --json` 表达工作归属并创建或复用子图，还会默认把子任务加入父任务完成目标。已有子图可以通过 `'task[<父任务ID>].subgraph.task' list` 查看；向此集合直接 add 不会自动更新父任务的 `completion_requires`。`--depends-on <前置ID>` 表达必须等待的交付，可重复传入多个前置。调整已有关系可用 `'task[<后继ID>].dependency' add <前置ID>` 和对应的 `.dependency remove`。需要独立调查、补足能力或记录决策时，都可以用这些能力表达；决策任务可标 `--kind decision`，实际提问仍由主控发起。
-
-多项工作适合一起表达时，单图且没有 `parent_task` 的计划用 `'graph[<图ID>].task' add --from <计划JSON绝对路径>`；跨图或含 `parent_task` 的计划用 `task add --from <计划JSON绝对路径>`。使用稳定 key 和 @key 引用关系。content 支持路径数组。批量字段、子图和安全重试见 [主控接口参考](../../references/controller-workflow.md)。
-
-### 补充要求，并记录开工判断
-
-随着信息变清楚，可以直接修订已有要求，也可以绑定新文件，分别说明实际接口、实施边界或验收入口：
-
-```text
-CLI 'graph[<图ID>].task[<ID>].content' attach --path docs/tasks/details.md --summary "<这份文件补充了什么>" --cwd "<项目根目录>" --json
-```
-
-多份 content 共同构成当前要求。修订时协调它们的含义；过时绑定可通过 `'graph[<图ID>].task[<ID>].content' remove --path <旧路径>` 移除，原文件与历史快照保留。资料已有权威出处时，给出定位和用途通常比复制正文更便于维护。
-
-当你判断任务具备执行条件，可以用 `'graph[<图ID>].task[<ID>]' refine --reason "<支持本次判断的依据>"` 记录判断并放行。工具检查依赖和人工阻塞，保存输入指纹；它无法替主控证明内容充分。
-
-**这里有几项工具约束：**
-
-- 动态任务开始时需要当前 `planningState=refined` 且 `readiness=ready`；前置完成不会自动 refine。
-- 要求、依赖或相关前置参考变化可能使判断变为 `stale`，重新判断后再 refine。`'graph[<图ID>].task[<ID>]' unrefine --reason "<原因>"` 可以主动撤回放行。
-- 执行中的动态任务受到结构修改保护。调整范围时先协调已有施工，按情况采用取消、替代或后续任务；具体限制见 [动态工作流参考](../../references/dynamic-workflow.md)。
-
-### 让执行者取得上下文，自主推进
-
-派工提供实际项目/checkout 路径、CLI 路径和完整任务地址（含 graph ID 与 task ID）。执行者使用 start 或 show --detail 返回的 [task-take](../task-take/SKILL.md)，读取全部要求和必要参考，记录上下文确认后自主施工，无须主控二次许可。start/claim 登记实际执行会话，同一次开始由一方记录。
-
-主控亲自承担统筹任务时也使用自己的会话记录 start；父任务需要先进入 in_progress，才能最终 complete。父子职责根据任务内容区分。
-
-希望后续任务使用哪些交付知识，可以在当前要求中说明。执行者用 reference 登记实际入口，后继沿直接依赖取得；主控据此阅读必要代码或材料。工作记录中的缺口和任务的 block 操作可帮助定位无法推进的原因。block 保存 blocked 状态与原因，解除最后一个原因后恢复原阶段；接手 blocked 修复时先 start/reassign 进入 in_progress，原原因归档；仍有问题就再次 block，让主控收到新一轮通知。unready 表示依赖或细化门槛未满足，仍不能开工。审查受阻重跑同一交付用 review restart，修改交付则先接手修复再 complete。
-
-### 用验收结果支持后续判断
-
-需要主控主要通过报告掌握交付质量时，可以把独立验收作为子图中的完成目标，使用 `--kind acceptance`，依赖待验证的实现。预先确定验收标准，具体运行入口随实现补齐，交给独立执行者验证。
-
-验收者通过 `'graph[<图ID>].task[<ID>]' complete --result pass --report <报告>` 或 `'graph[<图ID>].task[<ID>]' reject --report <报告> --error-report <失败小报告.md>` 保存结果与证据。主控读报告判断下一步；失败可能需要定位、修复、重新讨论或复验，采用哪种安排取决于证据。
-
-工具保留失败报告，reject 继续阻塞后继和父任务完成目标。复验使用显式 reopen，动态任务仍需当前有效的 refinement。环境缺失导致无法验证时，可以记录缺口并 block。父任务的 completion_requires 全部满足后，由主控审阅结果并显式 complete 收口；既有任务另有验收责任约定时按其约定执行。
-
-任务需要独立审查者检查交付时，先判断检查条件是否已经清楚。已清楚的任务在开工前绑定一份或多份 RR，并启用任务 `.auto-review`；图的 `.auto-review enable` 是一次扫描，补齐 RR 或新增任务后可再扫描。若需要先看执行报告才能确定检查条件，任务普通完成后由主控确定 RR 并手动 `.review start`。两条路径都会先进入 `pending_review`，审查线程启动后自动转为 `reviewing`，由审查者通过 `.review finish` 给出 pass/reject/blocked；执行者提交后结束本轮职责。主控根据审查报告和异常再判断修复、补充环境或调整计划。操作边界见 [独立审查](../../references/review.md)。
-
-### 获取通知，或把状态交给人审阅
-
-希望任务结果唤回 Desktop 主控时，可主动订阅：
-
-```text
-CLI 'graph[<图ID>].watch' add --thread <当前主控Desktop UUID> --cwd "<项目根目录>" --json
-```
-
-它覆盖图及子图未来的 pass/reject，以及独立审查的 blocked、异常退出和超时提醒。可从 CODEX_THREAD_ID/CODEX_SESSION_ID 核实当前会话 UUID；显式注册后才发送。同图同会话重复注册幂等。`'graph[<图ID>].watch' status` 查询投递，`'graph[<图ID>].watch' remove --thread <UUID>` 取消。
-
-通知进入后续 turn，忙碌主控需要结束当前 turn 才能消费；accepted 表示队列接收。收到通知后查看当前任务和必要证据，继续原有授权内的判断。版本适用范围与投递恢复见 [动态工作流参考](../../references/dynamic-workflow.md)。
-
-结构化修改自动更新 `.task-graph/generated/index.html`，直接编辑文档后可用 `. build` 刷新。交接时提供实际图、相关任务和 HTML 入口，并说明当前判断和未决问题。命令检查退出码和 ok；已启用 GitHub 时，pending 表示本地保存成功、远程待同步，可继续按工具提供的恢复方式处理。
+| 当前工作 | 手册 |
+| --- | --- |
+| 共享契约、代码入口或已定决策登记 | [契约与条目](../../references/operations/contracts.md) |
+| 定位 CLI / 项目 | [准备与定位](../../references/operations/bootstrap.md) |
+| 创建任务或骨架 | [创建计划](../../references/operations/planning.md) |
+| 写要求与前置产物约定 | [上下文设计](../to-task/references/task-context.md) |
+| 增补 content / RR | [附件](../../references/operations/attachments.md) |
+| 调整子图、依赖或 gate | [关系](../../references/operations/relationships.md) |
+| refine、撤回放行 | [动态细化](../../references/operations/refinement.md) |
+| 派工、读交付、收口 | [主控协作](../../references/workflows/controller.md) |
+| 配置或恢复独立审查 | [审查控制](../../references/operations/review-control.md) |
+| 订阅结果 | [通知](../../references/operations/watch.md) |
+| 修订或刷新 HTML | [维护](../../references/operations/maintenance.md) |

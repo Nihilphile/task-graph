@@ -25,6 +25,8 @@ export interface ClockOptions {
 }
 
 export interface AddTaskOptions extends ClockOptions {
+  readonly contracts?: readonly string[];
+  readonly references?: readonly string[];
   readonly planning?: 'static' | 'dynamic';
   readonly kind?: 'work' | 'acceptance' | 'decision';
   readonly contentFiles?: readonly string[];

@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { readKnowledge } from '../core/knowledge-store.js';
 import { errorBookEntries } from '../core/error-book.js';
 import path from 'node:path';
 import { parseArgs, type ParsedArgs } from './args.js';
@@ -15,6 +16,8 @@ export interface ResourceAddress {
   type: string;
   graph?: string;
   task?: string;
+  contract?: string;
+  reference?: string;
   originGraph?: string;
   parents?: readonly string[];
 }
@@ -29,6 +32,9 @@ function graphAddress(graph: string): string {
 
 /** A deliberately small address grammar, never evaluated as JavaScript. */
 export function parseResource(address: string): ResourceAddress {
+  if (['contract', 'reference', 'decision'].includes(address)) return { address, type: `${address}-catalog` };
+  const knowledge = /^(contract\[(C-\d{4,})\](\.reference)?|reference\[(R-\d{4,})\])$/.exec(address);
+  if (knowledge) return { address, type: knowledge[4] ? 'reference-item' : knowledge[3] ? 'contract-reference' : 'contract-item', contract: knowledge[2], reference: knowledge[4] };
   if (['.', 'graph', 'task', 'source', 'github', 'skill', 'errorbook'].includes(address)) return { address, type: address };
   const invalid = (): never => {
     throw usageError(`Invalid resource address "${address}"`, ["Use 'graph[G-001].task[T-0001]' or run task-graph . describe."]);
@@ -55,7 +61,7 @@ export function parseResource(address: string): ResourceAddress {
     if (type === 'graph-item' && tail === '.watch') type = 'watch';
     else if (type === 'graph-item' && tail === '.auto-review') type = 'graph-auto-review';
     else if (type === 'graph-item' && tail === '.errorbook') type = 'errorbook';
-    else if (task && /^\.(content|review-requirement|review|auto-review|report|reference|log|handoff|output|dependency|subgraph)$/.test(tail)) type = tail.slice(1);
+    else if (task && /^\.(content|contract|review-requirement|review|auto-review|report|reference|log|handoff|output|dependency|subgraph)$/.test(tail)) type = tail.slice(1);
     else return invalid();
   }
   const canonical = graph === undefined ? address : graphAddress(graph) + address.slice(address.indexOf(']') + 1);
@@ -94,6 +100,18 @@ function routes(resource: ResourceAddress, commands: readonly CommandSpec[]): Ro
   };
   const read = (action: string, summary: string) => result.push({ action, summary });
   switch (resource.type) {
+    case 'contract-catalog': add('add', 'contract add'); add('list', 'contract list'); break;
+    case 'contract-item': add('show', 'contract show'); add('update', 'contract update'); break;
+    case 'reference-catalog': add('add', 'reference add'); add('list', 'reference list'); break;
+    case 'reference-item': add('show', 'reference show'); add('update', 'reference update'); break;
+    case 'decision-catalog': add('record', 'decision record'); break;
+    case 'contract-reference':
+    case 'contract':
+    case 'reference': {
+      const prefix = resource.type === 'contract-reference' ? 'contract reference ' : `task ${resource.type} `;
+      for (const command of commands) if (command.name.startsWith(prefix)) add(command.name.slice(prefix.length), command.name);
+      break;
+    }
     case 'errorbook': read('list', 'List appended failure report snapshots'); read('show', 'Read failure reports in chronological order'); break;
     case '.':
       for (const action of ['init', 'validate', 'build']) add(action, action);
@@ -143,12 +161,15 @@ function routes(resource: ResourceAddress, commands: readonly CommandSpec[]): Ro
 }
 
 function children(resource: ResourceAddress): string[] {
-  if (resource.type === '.') return ['graph', 'task', 'source', 'github', 'skill', 'errorbook'];
+  if (resource.type === 'contract-catalog') return ['contract[C-NNNN]'];
+  if (resource.type === 'reference-catalog') return ['reference[R-NNNN]'];
+  if (resource.type === 'contract-item') return [`${resource.address}.reference`];
+  if (resource.type === '.') return ['graph', 'task', 'contract', 'reference', 'decision', 'source', 'github', 'skill', 'errorbook'];
   if (resource.type === 'graph') return ['graph[G-NNN]'];
   if (resource.type === 'graph-item') return [`${resource.address}.task`, `${resource.address}.watch`, `${resource.address}.auto-review`, `${resource.address}.errorbook`];
   if (resource.type === 'task') return [resource.address !== 'task' ? `${resource.address}[T-NNNN]` : 'graph[G-NNN].task[T-NNNN]'];
   if (resource.type === 'subgraph') return [`${resource.address}.task`];
-  if (resource.type === 'task-item') return ['content', 'review-requirement', 'auto-review', 'review', 'reference', 'report', 'log', 'handoff', 'output', 'dependency', 'subgraph'].map(k => `${resource.address}.${k}`);
+  if (resource.type === 'task-item') return ['content', 'contract', 'review-requirement', 'auto-review', 'review', 'reference', 'report', 'log', 'handoff', 'output', 'dependency', 'subgraph'].map(k => `${resource.address}.${k}`);
   return [];
 }
 
@@ -163,6 +184,8 @@ function inspect(root: string, resource: ResourceAddress, required: boolean): In
     return fail('Project is not initialized. Use task-graph . init --name <name>; describe is read-only.');
   }
   const repository = loadTaskRepository(root);
+  if (resource.contract && !readKnowledge(root).contracts.some(c => c.id === resource.contract)) return fail(`Unknown contract ${resource.contract}`, repository);
+  if (resource.reference && !readKnowledge(root).references.some(r => r.id === resource.reference)) return fail(`Unknown reference ${resource.reference}`, repository);
   let graph = resource.originGraph;
   if (graph && !repository.manifest.graphs.some(g => g.id === graph)) return fail(`Unknown graph "${graph}"`, repository);
   const ids = [...(resource.parents ?? []), ...(resource.task ? [resource.task] : [])];
@@ -224,6 +247,8 @@ function resourceUsage(resource: ResourceAddress, route: Route): string {
   }
   let suffix = route.command!.usage.slice(`task-graph ${route.command!.name}`.length);
   if (resource.task) suffix = suffix.replace(/^ T-NNNN/, '');
+  else if (resource.contract) suffix = suffix.replace(/^ C-NNNN/, '');
+  else if (resource.reference) suffix = suffix.replace(/^ R-NNNN/, '');
   else if (resource.type === 'graph-item' || resource.type === 'watch' || resource.type === 'graph-auto-review') suffix = suffix.replace(/^ G-NNN/, '');
   if (resource.type === 'task' && resource.graph) suffix = suffix.replace(' [--graph G-NNN | --parent-task T-NNNN]', '').replace(' [--graph G-NNN]', '');
   return `task-graph '${resource.address}' ${route.action}${suffix}`;
@@ -263,7 +288,7 @@ export interface ResourceInvocation { argv: string[]; resource: ResourceAddress;
 export function prepareResource(argv: readonly string[], ctx: CliContext, commands: readonly CommandSpec[]): ResourceInvocation | null | undefined {
   const first = argv[0] ?? '';
   const resourceSyntax = first === '.' || first === 'errorbook' || first.includes('[') || first.includes(']') || first.startsWith('graph.')
-    || (['graph', 'task', 'source', 'github', 'skill'].includes(first) && ['describe', '--help', '-h'].includes(argv[1] ?? ''))
+    || (['graph', 'task', 'source', 'github', 'skill', 'contract', 'reference', 'decision'].includes(first) && ['describe', '--help', '-h'].includes(argv[1] ?? ''))
     || (first === 'graph' && argv[1] === 'list');
   if (!resourceSyntax) return undefined;
   let resource = parseResource(first);
@@ -331,7 +356,7 @@ export function prepareResource(argv: readonly string[], ctx: CliContext, comman
     }
     return target.task! + (gate.length ? `:${gate[0]}` : '');
   }));
-  const target = resource.task ?? (['graph-item', 'watch', 'graph-auto-review'].includes(resource.type) ? resource.graph : undefined);
+  const target = resource.task ?? resource.contract ?? resource.reference ?? (['graph-item', 'watch', 'graph-auto-review'].includes(resource.type) ? resource.graph : undefined);
   const translated = [...route.command.name.split(' '), ...(target ? [target] : []), ...(route.fixed ?? []),
     ...[...options].flatMap(([key, values]) => values.map(value => `--${key}=${value}`))];
   return { argv: translated, resource, ...(resource.type === 'task' && resource.graph ? { scopedGraph: resource.graph } : {}) };

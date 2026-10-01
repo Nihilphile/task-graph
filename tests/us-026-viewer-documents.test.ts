@@ -7,7 +7,7 @@ import { addPlannedTasks } from '../src/core/planning.js';
 import { attachDocument, createHandoff } from '../src/core/documents.js';
 import { addWorkLog } from '../src/core/annotations.js';
 import { useTempWorkspace } from './helpers/temp.js';
-import { click, openViewer, taskNode, viewportScale } from './helpers/viewer-dom.js';
+import { click, openViewer, taskNode, viewportScale, waitForLayout } from './helpers/viewer-dom.js';
 
 test('selection expands only the selected card; dependency anchors follow its size and deselection restores geometry', async (t) => {
   const w = useTempWorkspace(t, 'us-026-size');
@@ -18,20 +18,23 @@ test('selection expands only the selected card; dependency anchors follow its si
   const width = () => Number(taskNode(page, task.id).querySelector('.node-body')!.getAttribute('width'));
   const originalWidth = width();
   assert.ok(taskNode(page, task.id).querySelectorAll('.title tspan').length > 1);
-  const otherPosition = taskNode(page, 'T-0001').getAttribute('transform');
+  const otherWidth = taskNode(page, 'T-0001').querySelector('.node-body')!.getAttribute('width');
   const edge = () => page.document.querySelector('path.edge-full')!.getAttribute('d');
   const originalEdge = edge();
   const scale = viewportScale(page);
   click(page, taskNode(page, task.id));
+  await waitForLayout(page);
   assert.ok(width() > originalWidth);
   assert.equal(viewportScale(page), scale);
-  assert.equal(taskNode(page, 'T-0001').getAttribute('transform'), otherPosition);
+  assert.equal(taskNode(page, 'T-0001').querySelector('.node-body')!.getAttribute('width'), otherWidth);
   assert.notEqual(edge(), originalEdge);
   click(page, taskNode(page, task.id));
+  await waitForLayout(page);
   assert.equal(width(), originalWidth);
   assert.equal(edge(), originalEdge);
   click(page, taskNode(page, task.id));
   page.window.dispatchEvent(new page.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  await waitForLayout(page);
   assert.equal(width(), originalWidth);
   assert.deepEqual([...page.errors], []);
 });

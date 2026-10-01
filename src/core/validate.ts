@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { contractBinding, contractSections, selectContractText } from './contract-sections.js';
 import { TaskGraphError } from './errors.js';
 import { findDependencyCycles, formatCyclePath } from './dag.js';
 import { isTemporaryArtifact, listFilesWithExtension, readTextIfExists } from './fsx.js';
@@ -62,6 +63,31 @@ export function validateRepository(root: string): ValidationReport {
   for (const task of tasks) taskById.set(task.document.id, task);
 
   const graphIds = new Set(manifest.graphs.map((graph) => graph.id));
+  try {
+    const knowledge = readKnowledge(root);
+    const contractBodies = new Map<string, string>();
+    const referenceIds = new Set(knowledge.references.map(r => r.id));
+    for (const c of knowledge.contracts) {
+      documentPath(c.file);
+      const body = readDocument(root, c.file).toString('utf8');
+      contractSections(body);
+      contractBodies.set(c.id, body);
+      if (!graphIds.has(c.graph)) issues.push({ code: 'E_CONTRACT_GRAPH', file: KNOWLEDGE_FILE, field: c.id, message: `Unknown graph ${c.graph}` });
+    }
+    for (const { document, file } of tasks) {
+      try {
+        for (const value of document.contracts ?? []) {
+          const { id, section } = contractBinding(value);
+          if (!contractBodies.has(id)) issues.push({ code: 'E_NO_CONTRACT', file, field: 'contracts', message: `Unknown contract ${id}` });
+          else selectContractText(contractBodies.get(id)!, section ? [section] : undefined);
+        }
+      } catch (error) { issues.push({ code: 'E_CONTRACT_SECTION', file, field: 'contracts', message: String(error) }); }
+      for (const id of document.references ?? []) if (!referenceIds.has(id)) issues.push({ code: 'E_REFERENCE', file, field: 'references', message: `Unknown reference ${id}` });
+    }
+    for (const d of knowledge.decisions) if (!taskById.has(d.task)) issues.push({ code: 'E_DECISION', file: KNOWLEDGE_FILE, field: d.key, message: `Unknown decision task ${d.task}` });
+  } catch (error) {
+    issues.push({ code: 'E_KNOWLEDGE', file: KNOWLEDGE_FILE, field: '', message: String(error) });
+  }
   const entryIds = new Set(manifest.entryGraphs);
   const sourceIds = new Set(manifest.sources.map((source) => source.id));
   const parentByGraph = parentCompositeByGraph(tasks);
@@ -357,3 +383,5 @@ export function treeRootOf(
   }
   return undefined;
 }
+import { readKnowledge, KNOWLEDGE_FILE } from './knowledge-store.js';
+import { documentPath, readDocument } from './documents.js';
