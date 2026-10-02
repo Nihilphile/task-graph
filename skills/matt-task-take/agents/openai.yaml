@@ -1,0 +1,4 @@
+interface:
+  display_name: "Matt Task Take"
+  short_description: "用 Matt 的实现方法完成具体任务，并通过 task-graph 登记入口与轻量交接"
+  default_prompt: "使用 $matt-task-take 接手这个任务，完成实现、验证、审查和轻量交接。"

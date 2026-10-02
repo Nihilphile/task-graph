@@ -42,6 +42,13 @@ node dist/src/cli.js help
 
 可将相应目录链接到本机技能目录。配套 Skill 共用本仓库的 references，安装时保留完整仓库布局；通过 junction/symlink 使用时按真实目标解析相对链接，单独复制某个 skills 子目录不能构成完整安装。task-take 也会由 CLI 返回实际路径。验证主控到执行者的配套流程可运行 `npm run test:workflow`。
 
+另提供两个可选的 Matt 工作流入口：
+
+- [matt-task](skills/matt-task/SKILL.md)：承接已讨论需求，形成 spec contract，再按纵向切片创建任务要求和依赖，替代 `to-spec` 与 `to-tickets`。
+- [matt-task-take](skills/matt-task-take/SKILL.md)：替代单任务 `implement`，完成实现、验证、双轴审查和提交；有任务图时通过 CLI 领取、登记重点代码入口和轻量交接。
+
+这两个目录自带各自的 references，可分别安装到技能目录；使用任务图时需要另行安装并构建 task-graph CLI。规划入口与 `to-task` 按需择一，执行入口与 `task-take` 按需择一。它们不包含 Grill 或 `implement-spec` 的整图并行实施与集成流程。
+
 `references/workflows/` 说明角色职责和判断原则；`references/operations/` 按功能提供命令、前提与恢复方法。按当前角色和操作读取，不需要通读整套文档。
 
 ## 快速开始

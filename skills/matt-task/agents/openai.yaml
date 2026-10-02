@@ -1,0 +1,4 @@
+interface:
+  display_name: "Matt Task"
+  short_description: "将已讨论需求整理为 spec contract，再用 task-graph 创建纵向切片任务图"
+  default_prompt: "使用 $matt-task 将已有讨论整理为 spec contract，并拆成带要求和依赖的可执行任务图。"
